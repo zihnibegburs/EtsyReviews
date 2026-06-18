@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Etsy Reviews Export</title>
+    <link rel="stylesheet" href="styles/common.css">
+    <style>
+        body {
+            background: var(--color-bg);
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: var(--color-surface);
+            padding: 24px 28px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border-light);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 16px;
+        }
+
+        .header h1 {
+            color: var(--color-text);
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .header-info {
+            display: flex;
+            gap: 32px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-size: 11px;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 500;
+        }
+
+        .info-value {
+            font-size: 20px;
+            color: var(--color-text);
+            font-weight: 700;
+            margin-top: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .controls {
+            background: var(--color-surface);
+            padding: 16px 20px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border-light);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .controls-meta {
+            color: var(--color-text-muted);
+            font-size: 13px;
+        }
+
+        .controls button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition);
+        }
+
+        .btn-export {
+            background: var(--color-primary);
+            color: white;
+        }
+
+        .btn-export:hover:not(:disabled) {
+            background: var(--color-primary-hover);
+        }
+
+        .btn-export:disabled {
+            background: var(--color-border);
+            color: var(--color-text-muted);
+            cursor: not-allowed;
+        }
+
+        #loading {
+            background: var(--color-surface);
+            padding: 48px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border-light);
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+
+        #loading p {
+            color: var(--color-text-secondary);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        #loading .hint {
+            font-size: 12px;
+            color: var(--color-text-muted);
+            margin-top: 8px;
+        }
+
+        .spinner {
+            border: 3px solid var(--color-border);
+            border-top: 3px solid var(--color-primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #reviews {
+            background: var(--color-surface);
+            padding: 4px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border-light);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: var(--color-bg);
+        }
+
+        th {
+            padding: 11px 14px;
+            text-align: left;
+            color: var(--color-text-muted);
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        td {
+            padding: 11px 14px;
+            border-top: 1px solid var(--color-border-light);
+            font-size: 13px;
+            color: var(--color-text);
+        }
+
+        tr:hover td {
+            background: #FDFDFD;
+        }
+
+        .review-rating {
+            color: #E8A317;
+            font-size: 14px;
+        }
+
+        .review-item a {
+            color: var(--color-primary);
+            text-decoration: none;
+        }
+
+        .review-item a:hover {
+            text-decoration: underline;
+        }
+
+        #pagination-controls {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        #pagination-controls span {
+            padding: 6px 11px;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: background var(--transition), border-color var(--transition);
+            font-size: 13px;
+            color: var(--color-text-secondary);
+        }
+
+        #pagination-controls span:hover {
+            background: var(--color-bg);
+        }
+
+        #pagination-controls span.active {
+            background: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+        }
+
+        .error {
+            background: var(--color-danger-bg);
+            color: var(--color-danger);
+            padding: 14px 16px;
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+            font-size: 14px;
+        }
+
+        .warning {
+            background: var(--color-warning-bg);
+            color: var(--color-warning);
+            padding: 14px 16px;
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Etsy Reviews Export</h1>
+            <div class="header-info">
+                <div class="info-item">
+                    <span class="info-label">Total Reviews</span>
+                    <span class="info-value" id="totalReviews">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Listing ID</span>
+                    <span class="info-value" id="displayListingId">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Shop ID</span>
+                    <span class="info-value" id="displayShopId">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <span class="controls-meta">10 reviews per page</span>
+            <button id="exportCsvBtn" class="btn-export" disabled>Export to CSV</button>
+        </div>
+
+        <div id="loading">
+            <div class="spinner"></div>
+            <p>Fetching reviews from Etsy...</p>
+            <p class="hint">This may take a few minutes</p>
+        </div>
+
+        <div id="reviews"></div>
+        <div id="pagination-controls"></div>
+    </div>
+
+    <script src="utils/config.js"></script>
+    <script src="output.js"></script>
+</body>
+</html>

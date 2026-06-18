@@ -1,0 +1,135 @@
+/* Content Script Styles */
+
+.etsy-ext-premium-badge {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    background: #F1641E;
+    color: white;
+    padding: 7px 14px;
+    border-radius: 20px;
+    box-shadow: 0 2px 10px rgba(241, 100, 30, 0.35);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    animation: slideInRight 0.25s ease-out;
+}
+
+.etsy-ext-badge-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.etsy-ext-upgrade-prompt {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #E8E8E8;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    max-width: 300px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    animation: slideInUp 0.25s ease-out;
+}
+
+.etsy-ext-prompt-content {
+    padding: 20px;
+    position: relative;
+}
+
+.etsy-ext-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #8A8A8A;
+    cursor: pointer;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.etsy-ext-close-btn:hover {
+    background: #F7F7F7;
+    color: #222;
+}
+
+.etsy-ext-prompt-content h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    color: #222;
+    font-weight: 600;
+}
+
+.etsy-ext-prompt-content p {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: #595959;
+    line-height: 1.5;
+}
+
+.etsy-ext-prompt-content ul {
+    margin: 0 0 16px;
+    padding-left: 18px;
+    font-size: 13px;
+    color: #595959;
+    line-height: 1.6;
+}
+
+.etsy-ext-prompt-content ul li {
+    margin-bottom: 2px;
+}
+
+.etsy-ext-upgrade-btn {
+    width: 100%;
+    padding: 10px 20px;
+    background: #F1641E;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.etsy-ext-upgrade-btn:hover {
+    background: #D8560F;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+    .etsy-ext-premium-badge {
+        top: 10px;
+        right: 10px;
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+
+    .etsy-ext-upgrade-prompt {
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+}

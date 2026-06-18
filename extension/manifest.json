@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "Etsy Extension",
+  "version": "1.0.0",
+  "description": "Chrome extension for Etsy with subscription management",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs7u23siOhG+M62gb55iN6Axk9U7bAb6jIoL1RAJN6B9bcUNadc6VgC9U1BhtgGSGyKMS6Vte5BA5YUcwfIEZR60liCCtEcXHuDqqFG+RE5t21PXPS+l1WEJvsQXmKczFuJW5ndqnHfuBi4j4mv5d7Hm6p63fVw/yeThZM+ZzEHH65CHgiPqvt8+xWsNJQOOL6bMpiT3WG9maTQ6+2wN9Gl4qFbLQi1MuVXhxxDIuHZKQH8MicUXPe1/4+Ye6zdil6hhrUZbOpOBitFD5V6u1K4aeogUAPg6G4t0fDmHk2wos7tXGKX/w8VbBJ6tqLU7o9jrS4q5OFzzkASFpH/TLzQIDAQAB",
+  "icons": {
+    "16": "extension_icon.png",
+    "48": "extension_icon.png",
+    "128": "extension_icon.png"
+  },
+  "permissions": [
+    "storage",
+    "identity",
+    "tabs",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:8081/*",
+    "https://*.onrender.com/*",
+    "https://www.googleapis.com/*",
+    "https://api.laodikeia.co/*",
+    "https://checkout.stripe.com/*",
+    "*://www.etsy.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "extension_icon.png",
+      "48": "extension_icon.png",
+      "128": "extension_icon.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.etsy.com/listing/*"],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["output.html", "output.js", "checkout.html", "checkout.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "oauth2": {
+    "client_id": "392877515606-8nbfqlat4elu1t1g7mof1gfo4dhmao5i.apps.googleusercontent.com",
+    "scopes": [
+      "openid",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
+

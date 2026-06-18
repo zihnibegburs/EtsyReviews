@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Etsy Review Scraper</title>
+    <link rel="stylesheet" href="../styles/common.css">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Login Screen -->
+        <div id="loginScreen" class="screen">
+            <div class="login-container">
+                <div class="logo">
+                    <svg width="28" height="28" viewBox="0 0 24 24">
+                        <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                    </svg>
+                </div>
+                <h1>Etsy Review Scraper</h1>
+                <p class="subtitle">Sign in to scrape and export reviews</p>
+
+                <button id="loginBtn" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 18 18">
+                        <path fill="#4285F4" d="M17.64,9.2045c0-0.6381-0.0573-1.2518-0.1636-1.8409H9v3.4814h4.8436c-0.2086,1.125-0.8427,2.0782-1.7959,2.7164v2.2581h2.9087C16.6582,14.0918,17.64,11.8709,17.64,9.2045z"/>
+                        <path fill="#34A853" d="M9,18c2.43,0,4.4673-0.8059,5.9564-2.1805l-2.9087-2.2581c-0.8059,0.54-1.8368,0.8591-3.0477,0.8591c-2.344,0-4.3282-1.5832-5.036-3.7104H0.9574v2.3318C2.4382,15.9832,5.4818,18,9,18z"/>
+                        <path fill="#FBBC05" d="M3.964,10.71c-0.18-0.54-0.2822-1.1168-0.2822-1.71s0.1023-1.17,0.2822-1.71V4.9582H0.9573C0.3477,6.1773,0,7.5491,0,9s0.3477,2.8227,0.9573,4.0418L3.964,10.71z"/>
+                        <path fill="#EA4335" d="M9,3.5795c1.3214,0,2.5077,0.4541,3.4405,1.346l2.5813-2.5813C13.4632,0.8918,11.426,0,9,0C5.4818,0,2.4382,2.0168,0.9574,4.9582L3.964,7.29C4.6718,5.1627,6.656,3.5795,9,3.5795z"/>
+                    </svg>
+                    Sign in with Google
+                </button>
+
+                <div class="features">
+                    <div class="feature-item">
+                        <svg width="12" height="12" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>Scrape reviews</span>
+                    </div>
+                    <div class="feature-item">
+                        <svg width="12" height="12" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>CSV export</span>
+                    </div>
+                    <div class="feature-item">
+                        <svg width="12" height="12" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>Pro features</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Screen -->
+        <div id="mainScreen" class="screen hidden">
+            <div class="modern-flex">
+                <nav class="sidebar vertical-sidebar">
+                    <button id="tabHome" class="tab-btn sidebar-btn active" title="Home">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                        </svg>
+                    </button>
+                    <button id="tabPurchase" class="tab-btn sidebar-btn" title="Upgrade">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
+                        </svg>
+                    </button>
+                    <button id="tabFAQ" class="tab-btn sidebar-btn" title="FAQ">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+                        </svg>
+                    </button>
+                    <button id="tabSettings" class="tab-btn sidebar-btn" title="Settings">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                        </svg>
+                    </button>
+                </nav>
+
+                <div class="main-content">
+                    <div class="header-section">
+                        <div class="user-header">
+                            <div class="user-info">
+                                <img id="userAvatar" src="" alt="User" class="avatar">
+                                <div class="user-details">
+                                    <div id="userName" class="user-name">Loading...</div>
+                                    <div id="userEmail" class="user-email">Loading...</div>
+                                    <div class="version-info">v1.0.0</div>
+                                </div>
+                            </div>
+                            <button id="logoutBtn" class="btn-icon" title="Logout">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Home -->
+                    <div id="pageHome" class="tab-page active">
+                        <div class="content-section">
+                            <h2>Reviews</h2>
+                            <p id="statusText" class="status-text muted">Navigate to an Etsy listing to start</p>
+
+                            <div class="info-card hidden" id="etsyDataCard">
+                                <h3>Detected Listing</h3>
+                                <div class="info-row">
+                                    <span class="label">Listing ID</span>
+                                    <span id="displayListingId">-</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">Shop ID</span>
+                                    <span id="displayShopId">-</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">Status</span>
+                                    <span id="displayStatus" class="status-badge">Ready</span>
+                                </div>
+                            </div>
+
+                            <div class="actions">
+                                <button id="fetchReviews" class="btn btn-primary btn-large" disabled title="FREE: 50 reviews. PRO: unlimited">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                                    </svg>
+                                    Fetch Reviews
+                                </button>
+                                <button id="refreshBtn" class="btn btn-outline" title="Refresh listing data">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div class="subscription-info">
+                                <div class="subscription-status">
+                                    <span class="label">Plan</span>
+                                    <span id="statusBadge" class="status-badge inactive">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Purchase -->
+                    <div id="pagePurchase" class="tab-page">
+                        <div class="content-section">
+                            <h2>Upgrade to PRO</h2>
+                            <p class="page-desc">Unlimited exports and advanced features</p>
+
+                            <div class="subscription-status-card">
+                                <h3>Current Plan</h3>
+                                <div class="status-display">
+                                    <span id="currentPlan" class="status-badge inactive">FREE</span>
+                                </div>
+                            </div>
+
+                            <div class="pricing-cards">
+                                <div class="pricing-card">
+                                    <h3>Monthly</h3>
+                                    <div class="price">$8<span>/mo</span></div>
+                                    <ul class="features-list">
+                                        <li>Unlimited review exports</li>
+                                        <li>Priority support</li>
+                                        <li>Advanced analytics</li>
+                                        <li>No watermarks</li>
+                                    </ul>
+                                    <button id="buyMonthly" class="btn btn-primary">Get Monthly</button>
+                                </div>
+
+                                <div class="pricing-card featured">
+                                    <div class="badge">Best Value</div>
+                                    <h3>Yearly</h3>
+                                    <div class="price">$70<span>/yr</span></div>
+                                    <div class="savings">Save $26</div>
+                                    <ul class="features-list">
+                                        <li>Everything in Monthly</li>
+                                        <li>2 months free</li>
+                                        <li>Early access</li>
+                                        <li>Priority support</li>
+                                    </ul>
+                                    <button id="buyYearly" class="btn btn-primary">Get Yearly</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FAQ -->
+                    <div id="pageFAQ" class="tab-page">
+                        <div class="content-section">
+                            <h2>FAQ</h2>
+                            <p class="page-desc">Common questions</p>
+
+                            <div class="faq-item">
+                                <h3>How do I scrape reviews?</h3>
+                                <p>Go to any Etsy listing page, open this extension, and click "Fetch Reviews".</p>
+                            </div>
+
+                            <div class="faq-item">
+                                <h3>Can I export to CSV?</h3>
+                                <p>Yes. After fetching reviews, export the current page to CSV for use in Excel or other tools.</p>
+                            </div>
+
+                            <div class="faq-item">
+                                <h3>What's in the PRO plan?</h3>
+                                <p>Unlimited exports, priority support, advanced analytics, no watermarks, and early access to new features.</p>
+                            </div>
+
+                            <div class="faq-item">
+                                <h3>How do I cancel?</h3>
+                                <p>Cancel anytime from Settings or contact support.</p>
+                            </div>
+
+                            <div class="faq-item">
+                                <h3>Need help?</h3>
+                                <p>Email us at <a href="mailto:support@example.com">support@example.com</a></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings -->
+                    <div id="pageSettings" class="tab-page">
+                        <div class="content-section">
+                            <h2>Settings</h2>
+                            <p class="page-desc">Fetch configuration</p>
+
+                            <div class="settings-section">
+                                <h3>Request Delay</h3>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <div>
+                                            <strong>Random delay</strong>
+                                            <p class="setting-desc">Seconds between requests when fetching reviews</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="delay-inputs">
+                                        <label for="minDelay">Min</label>
+                                        <input type="number" id="minDelay" min="1" max="100" value="1">
+                                        <label for="maxDelay">Max</label>
+                                        <input type="number" id="maxDelay" min="1" max="100" value="3">
+                                        <button id="saveDelayBtn" class="btn btn-primary">Save</button>
+                                    </div>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <strong>Current</strong>
+                                        <span id="currentDelayRange" class="setting-value">1–3 sec</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../utils/config.js"></script>
+    <script src="../utils/storage.js"></script>
+    <script src="../utils/api.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+/* --- Base --- */
+html, body {
+  width: 380px;
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #f7f8fa;
+  color: #333;
+  height: auto; /* let it grow with content */
+  overflow: hidden;
+}
+
+/* --- Container --- */
+.container {
+  display: flex;
+  flex-direction: row;
+  min-height: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+}
+
+/* --- Sidebar --- */
+.sidebar {
+  width: 60px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 12px;
+  border-right: 1px solid #eee;
+}
+
+.sidebar .icon {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #555;
+  transition: all 0.2s;
+}
+
+.sidebar .icon:hover {
+  background: #ffe8e5;
+  color: #ff6f61;
+  transform: scale(1.1);
+}
+
+.sidebar .icon.active {
+  background: #ff6f61;
+  color: #fff;
+}
+
+/* --- Main content --- */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  box-sizing: border-box;
+  background: #fafbfc;
+}
+
+/* --- Pages --- */
+.page { display: none; flex-direction: column; }
+.page.active { display: flex; }
+
+.page-content { flex: 1; padding: 6px 0; }
+
+/* --- Header --- */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.title { display: flex; gap: 6px; font-weight: 700; font-size: 13px; color: #ff6f61; }
+.icon-img { width: 20px; height: 20px; }
+.pro-badge { font-size: 9px; padding: 2px 5px; border-radius: 10px; background: #fff3f1; color: #ff6f61; font-weight: 600; }
+
+/* --- Content --- */
+.content { 
+  background: #fff; 
+  border-radius: 10px; 
+  padding: 12px; 
+  text-align: center; 
+  margin-top: 10px; 
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.lightbulb { font-size: 20px; margin-bottom: 4px; }
+.message { font-size: 12px; color: #555; margin: 4px 0; }
+.how-to { font-size: 11px; color: #ff6f61; text-decoration: none; font-weight: 600; }
+.how-to:hover { text-decoration: underline; }
+
+/* --- Buttons --- */
+#fetchReviews {
+  width: 100%;
+  padding: 6px 0;
+  font-size: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #ff6f61;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 10px;
+}
+#fetchReviews:hover { background: #e85c50; transform: translateY(-1px); }
+#fetchReviews:disabled { background: #ccc; cursor: not-allowed; }
+
+/* --- Footer --- */
+footer { font-size: 9px; color: #aaa; text-align: center; margin-top: auto; }
+
+/* --- Hidden / Loader --- */
+.hidden { display: none; }
+.loader { 
+  border: 3px solid #f3f3f3; 
+  border-top: 3px solid #ff6f61; 
+  border-radius: 50%; 
+  width: 24px; 
+  height: 24px; 
+  margin: 6px auto; 
+  animation: spin 1s linear infinite; 
+}
+@keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg); } }

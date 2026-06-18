@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upgrade to PRO - Etsy Review Scraper</title>
+    <link rel="stylesheet" href="styles/common.css">
+    <style>
+        body {
+            background: var(--color-bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 20px;
+        }
+
+        .container {
+            max-width: 720px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--color-text);
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            font-size: 15px;
+            color: var(--color-text-muted);
+        }
+
+        .current-status {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-lg);
+            padding: 14px;
+            margin-bottom: 24px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .current-status .label {
+            font-size: 12px;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 6px;
+        }
+
+        .current-status .status {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--color-text);
+        }
+
+        .pricing-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .pricing-card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-lg);
+            padding: 28px 24px;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            transition: border-color var(--transition);
+        }
+
+        .pricing-card:hover {
+            border-color: var(--color-border);
+        }
+
+        .pricing-card.featured {
+            border-color: var(--color-primary);
+        }
+
+        .badge {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--color-primary);
+            color: white;
+            padding: 3px 14px;
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .pricing-card h3 {
+            font-size: 18px;
+            margin-bottom: 12px;
+            color: var(--color-text);
+            font-weight: 600;
+        }
+
+        .price {
+            font-size: 40px;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 4px;
+            letter-spacing: -0.02em;
+        }
+
+        .price span {
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--color-text-muted);
+        }
+
+        .savings {
+            color: var(--color-success);
+            font-weight: 600;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+
+        .features-list {
+            list-style: none;
+            margin: 20px 0;
+            padding: 0;
+        }
+
+        .features-list li {
+            padding: 8px 0;
+            color: var(--color-text-secondary);
+            font-size: 14px;
+            border-bottom: 1px solid var(--color-border-light);
+        }
+
+        .features-list li:last-child {
+            border-bottom: none;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition);
+            margin-top: 12px;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--color-primary-hover);
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link a {
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color var(--transition);
+        }
+
+        .back-link a:hover {
+            color: var(--color-primary);
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--color-text-muted);
+            font-size: 14px;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 3px solid var(--color-border);
+            border-top: 3px solid var(--color-primary);
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .pricing-container {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 22px;
+            }
+
+            .price {
+                font-size: 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Upgrade to PRO</h1>
+            <p>Unlimited reviews and advanced features</p>
+        </div>
+
+        <div class="current-status" id="statusCard">
+            <div class="label">Current Plan</div>
+            <div class="status" id="currentStatus">Loading...</div>
+        </div>
+
+        <div class="pricing-container">
+            <div class="pricing-card">
+                <h3>Monthly</h3>
+                <div class="price">$8<span>/month</span></div>
+                <ul class="features-list">
+                    <li>Unlimited review exports</li>
+                    <li>Priority support</li>
+                    <li>Advanced analytics</li>
+                    <li>No watermarks</li>
+                    <li>Cancel anytime</li>
+                </ul>
+                <button id="monthlyBtn" class="btn btn-primary">Get Monthly Plan</button>
+            </div>
+
+            <div class="pricing-card featured">
+                <div class="badge">Best Value</div>
+                <h3>Yearly</h3>
+                <div class="price">$70<span>/year</span></div>
+                <div class="savings">Save $26 (27% off)</div>
+                <ul class="features-list">
+                    <li>Everything in Monthly</li>
+                    <li>27% discount</li>
+                    <li>Exclusive features</li>
+                    <li>Early access to updates</li>
+                    <li>Priority support</li>
+                </ul>
+                <button id="yearlyBtn" class="btn btn-primary">Get Yearly Plan</button>
+            </div>
+        </div>
+
+        <div id="loadingMessage" class="loading hidden">
+            <div class="spinner"></div>
+            <p style="margin-top: 12px;">Opening Stripe Checkout...</p>
+        </div>
+
+        <div class="back-link">
+            <a href="#" id="backLink">← Back to Extension</a>
+        </div>
+    </div>
+
+    <script src="utils/config.js"></script>
+    <script src="checkout.js"></script>
+</body>
+</html>

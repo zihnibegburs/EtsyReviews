@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Etsy Reviews</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f5f6fa;
+    padding: 20px;
+    color: #333;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+  }
+
+  h3 {
+    font-size: 28px;
+    color: #ff6f61;
+    margin: 0;
+  }
+
+  #exportCsvBtn {
+    padding: 10px 20px;
+    background: #ff6f61;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.3s, transform 0.2s;
+  }
+  #exportCsvBtn:hover { 
+    background: #e85c50; 
+    transform: translateY(-1px);
+  }
+
+  /* 📊 Table Styles */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+  }
+
+  thead {
+    background: #ff6f61;
+    color: white;
+  }
+
+  th, td {
+    padding: 12px 15px;
+    text-align: left;
+    font-size: 14px;
+    border-bottom: 1px solid #eee;
+  }
+
+  tr:hover {
+    background: #f9f9f9;
+  }
+
+  .review-rating {
+    color: #f1c40f;
+  }
+
+  .review-item a {
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .review-item a:hover {
+    text-decoration: underline;
+  }
+
+  /* 📄 Pagination */
+  #pagination-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+  }
+  #pagination-controls span {
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #e2e6ea;
+    font-weight: 600;
+    font-size: 15px;
+    transition: background 0.2s ease;
+  }
+  #pagination-controls span:hover { background: #cbd3d8; }
+  #pagination-controls span.active {
+    background: #ff6f61;
+    color: white;
+  }
+
+  /* 🔄 Loading Spinner */
+  #loading {
+    display: none;
+    text-align: center;
+    padding: 15px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #ff6f61;
+  }
+  #loading::after {
+    content: "⏳";
+    margin-left: 6px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin {
+    from { transform: rotate(0); }
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h3>Etsy Reviews</h3>
+  <button id="exportCsvBtn">Export as CSV</button>
+</div>
+
+<div id="reviews"></div>
+<div id="pagination-controls"></div>
+<div id="loading">Loading reviews...</div>
+
+<script src="output.js"></script>
+</body>
+</html>

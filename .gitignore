@@ -1,0 +1,59 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment & secrets (never commit)
+.env
+.env.local
+.env.*.local
+!.env.example
+backend/src/main/resources/application-local.properties
+
+# Keys & certs
+*.pem
+*.p12
+*.crx
+*.key
+
+# Java / Gradle
+.gradle/
+**/build/
+!**/src/**/build/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# Logs & temp
+*.log
+logs/
+tmp/
+temp/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma generated (web/auth)
+web/auth/src/generated/
+
+# Coverage & test output
+coverage/
+.nyc_output/
+
+# Docker volumes (local)
+postgres-data/

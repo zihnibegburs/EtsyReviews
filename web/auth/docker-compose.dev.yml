@@ -1,0 +1,39 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: next_oauth_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: oauth
+    # Host:Container port — postgres listens on 5432 in the container
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+
+  web:
+    image: node:20-alpine
+    container_name: next_oauth_web
+    working_dir: /app
+    command: sh -c "npm install && npx prisma generate && npm run dev"
+    ports:
+      - "3000:3000"
+
+    # Load all envs from this file (no YAML interpolation)
+    env_file:
+      - .env.docker.dev
+
+    # Remove the environment: block that used ${...} interpolation
+    # If you want to keep a couple static values, set them in the env_file instead.
+
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    depends_on:
+      - db
+
+volumes:
+  pgdata_dev:

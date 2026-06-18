@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Etsy Reviews Exporter</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <button class="icon active" id="homeBtn" title="Home">🏠</button>
+      <button class="icon" id="helpBtn" title="Help">❓</button>
+      <button class="icon" id="settingsBtn" title="Settings">⚙️</button>
+      <button class="icon" id="proBtn" title="Go Pro">👑</button>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main-content">
+      <!-- HOME PAGE -->
+      <section id="homePage" class="page active">
+        <header>
+          <div class="title">
+            <img src="icons/icon128.png" alt="Etsy Icon" class="icon-img" />
+            <span>Etsy Reviews <small>v1.5</small></span>
+          </div>
+          <span class="pro-badge">PRO</span>
+        </header>
+
+        <div class="page-content">
+          <button id="fetchReviews">Fetch Reviews</button>
+
+          <div class="content" id="normalState">
+            <div class="lightbulb">💡</div>
+            <p class="message">
+              Open an Etsy listing to start exporting reviews.
+            </p>
+            <a href="#" class="how-to">How to use?</a>
+          </div>
+
+          <div class="content hidden" id="loadingState">
+            <div class="loader"></div>
+            <p class="message">Fetching reviews...</p>
+          </div>
+
+          <div class="content hidden" id="completedState">
+            <div class="lightbulb">✅</div>
+            <p class="message">Export complete!</p>
+          </div>
+        </div>
+
+        <footer>
+          <small>©2022 InforId</small>
+        </footer>
+      </section>
+
+      <!-- HELP PAGE -->
+      <section id="helpPage" class="page">
+        <header><h2>Help & FAQ</h2></header>
+        <div class="page-content">
+          <p>Instructions on how to use the Etsy Reviews Exporter extension.</p>
+        </div>
+        <footer><small>©2022 InforId</small></footer>
+      </section>
+
+      <!-- SETTINGS PAGE -->
+      <section id="settingsPage" class="page">
+        <header><h2>Settings</h2></header>
+        <div class="page-content">
+          <p>Configure your preferences here.</p>
+        </div>
+        <footer><small>©2022 InforId</small></footer>
+      </section>
+
+      <!-- PRO PAGE -->
+      <section id="proPage" class="page">
+        <header><h2>Upgrade to Pro</h2></header>
+        <div class="page-content">
+          <p>Unlock advanced features by upgrading to Pro.</p>
+        </div>
+        <footer><small>©2022 InforId</small></footer>
+      </section>
+    </main>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
