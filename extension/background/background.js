@@ -17,6 +17,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             csrfToken: msg.csrfToken,
             listingId: msg.listingId,
             shopId: msg.shopId,
+            listingUrl: msg.listingUrl || null,
+            isExternalReferrer: !!msg.isExternalReferrer,
             categoryPath: msg.categoryPath || []
         };
         console.log('💾 Stored Etsy data:', {

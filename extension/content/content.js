@@ -2,124 +2,527 @@
 console.log('🚀 Etsy Review Scraper - Content script loaded');
 console.log('📍 Current URL:', window.location.href);
 
-// Wait for Etsy data and send to background
-function waitForEtsyData(maxRetries = 30, interval = 500) {
+const LISTING_ID_PATTERN = /\/listing\/(\d+)/;
+
+function findShopIdInObject(obj, depth = 0) {
+    if (!obj || depth > 10 || typeof obj !== 'object') return null;
+
+    if (obj.shop_id != null && /^\d+$/.test(String(obj.shop_id))) {
+        return parseInt(String(obj.shop_id), 10);
+    }
+    if (obj.shopId != null && /^\d+$/.test(String(obj.shopId))) {
+        return parseInt(String(obj.shopId), 10);
+    }
+
+    for (const value of Object.values(obj)) {
+        const found = findShopIdInObject(value, depth + 1);
+        if (found) return found;
+    }
+
+    return null;
+}
+
+function extractCsrfToken() {
+    const metaToken = document.querySelector('meta[name="csrf_nonce"]')?.content ||
+        document.querySelector('meta[name="x-csrf-token"]')?.content;
+    if (metaToken) return metaToken;
+
+    for (const script of document.querySelectorAll('script')) {
+        const match = script.textContent.match(/"csrf_nonce"\s*:\s*"([^"]+)"/);
+        if (match) return match[1];
+    }
+
+    return null;
+}
+
+function extractListingId() {
+    if (window.__etsy_server_data__?.listing_id) {
+        return parseInt(String(window.__etsy_server_data__.listing_id), 10);
+    }
+
+    const match = window.location.pathname.match(LISTING_ID_PATTERN);
+    return match ? parseInt(match[1], 10) : null;
+}
+
+function extractShopId() {
+    if (window.__etsy_server_data__?.shop_id) {
+        return parseInt(String(window.__etsy_server_data__.shop_id), 10);
+    }
+
+    for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+            const json = JSON.parse(script.textContent);
+            const items = Array.isArray(json) ? json : [json];
+            for (const item of items) {
+                const offers = item?.offers || item?.brand;
+                const shopId = findShopIdInObject(item) || findShopIdInObject(offers);
+                if (shopId) return shopId;
+            }
+        } catch {
+            // ignore invalid JSON-LD
+        }
+    }
+
+    for (const script of document.querySelectorAll('script[type="application/json"]')) {
+        try {
+            const shopId = findShopIdInObject(JSON.parse(script.textContent));
+            if (shopId) return shopId;
+        } catch {
+            // ignore invalid JSON blocks
+        }
+    }
+
+    for (const script of document.querySelectorAll('script')) {
+        const match = script.textContent.match(/"shop_id"\s*:\s*(\d+)/);
+        if (match) return parseInt(match[1], 10);
+    }
+
+    const dataShopId = document.querySelector('[data-shop-id]')?.getAttribute('data-shop-id');
+    if (dataShopId && /^\d+$/.test(dataShopId)) {
+        return parseInt(dataShopId, 10);
+    }
+
+    const shopLink = document.querySelector('a[href*="/shop/"]')?.getAttribute('href');
+    const shopMatch = shopLink?.match(/shop_id=(\d+)/);
+    if (shopMatch) return parseInt(shopMatch[1], 10);
+
+    const bodyMatch = document.body?.innerHTML.match(/"shop_id"\s*:\s*(\d+)/);
+    if (bodyMatch) return parseInt(bodyMatch[1], 10);
+
+    return null;
+}
+
+function collectEtsyData() {
+    const listingId = extractListingId();
+    const shopId = extractShopId();
+    const csrfToken = extractCsrfToken();
+    const listingUrl = window.location.href;
+    const isExternalReferrer = new URLSearchParams(window.location.search).get('external') === '1' ||
+        (document.referrer && !document.referrer.includes('etsy.com'));
+
+    return { listingId, shopId, csrfToken, listingUrl, isExternalReferrer };
+}
+
+function publishEtsyData() {
+    const data = collectEtsyData();
+
+    if (!data.listingId || !data.shopId) {
+        return false;
+    }
+
+    chrome.runtime.sendMessage({
+        type: 'etsyData',
+        csrfToken: data.csrfToken || null,
+        listingId: data.listingId,
+        shopId: data.shopId,
+        listingUrl: data.listingUrl,
+        isExternalReferrer: data.isExternalReferrer,
+        categoryPath: []
+    }, () => {
+        if (chrome.runtime.lastError) {
+            console.error('❌ Error sending Etsy data:', chrome.runtime.lastError);
+        }
+    });
+
+    return true;
+}
+
+function waitForEtsyData(maxRetries = 40, interval = 500) {
     let tries = 0;
 
-    const check = async () => {
+    const check = () => {
         tries++;
-        console.log(`🔍 Attempt ${tries}/${maxRetries} - Looking for Etsy data...`);
+        const data = collectEtsyData();
 
-        // Get CSRF token - multiple methods
-        let csrfToken = document.querySelector('meta[name="csrf_nonce"]')?.content ||
-                        document.querySelector('meta[name="x-csrf-token"]')?.content;
+        console.log(`🔍 Attempt ${tries}/${maxRetries}`, {
+            csrf: !!data.csrfToken,
+            listingId: data.listingId,
+            shopId: data.shopId
+        });
 
-        // Try script tags if not found
-        if (!csrfToken) {
-            const scripts = document.querySelectorAll('script');
-            for (const script of scripts) {
-                const match = script.textContent.match(/"csrf_nonce":"([^"]+)"/);
-                if (match) {
-                    csrfToken = match[1];
-                    break;
-                }
-            }
-        }
-
-        // Get listing ID - multiple methods
-        let listingId = window.__etsy_server_data__?.listing_id || null;
-        if (!listingId) {
-            const match = window.location.pathname.match(/listing\/(\d+)/);
-            if (match) listingId = parseInt(match[1], 10);
-        }
-
-        console.log(`   CSRF: ${csrfToken ? '✓' : '✗'}`);
-        console.log(`   Listing ID: ${listingId || '✗'}`);
-
-        // Get shop ID - multiple methods
-        let shopId = null;
-
-        // Method 1: __etsy_server_data__
-        if (window.__etsy_server_data__?.shop_id) {
-            shopId = window.__etsy_server_data__.shop_id;
-        }
-
-        // Method 2: JSON scripts
-        if (!shopId) {
-            const scripts = Array.from(document.querySelectorAll('script[type="application/json"]'));
-            for (const s of scripts) {
-                try {
-                    const json = JSON.parse(s.textContent);
-                    if (json.listing?.shop_id) {
-                        shopId = json.listing.shop_id;
-                        break;
-                    }
-                    if (json.shop?.shop_id) {
-                        shopId = json.shop.shop_id;
-                        break;
-                    }
-                } catch {}
-            }
-        }
-
-        // Method 3: HTML regex search
-        if (!shopId) {
-            const bodyText = document.body.innerHTML;
-            const match = bodyText.match(/"shop_id":(\d+)/);
-            if (match) shopId = parseInt(match[1], 10);
-        }
-
-        console.log(`   Shop ID: ${shopId || '✗'}`);
-
-        // If we have minimum required data (listing + shop), send to background
-        if (listingId && shopId) {
-            console.log('✅ Etsy data complete!');
-            console.log('📤 Sending to background:', { listingId, shopId, hasCsrf: !!csrfToken });
-
-            chrome.runtime.sendMessage({
-                type: "etsyData",
-                csrfToken: csrfToken || null,
-                listingId,
-                shopId,
-                categoryPath: []
-            }, (response) => {
-                if (chrome.runtime.lastError) {
-                    console.error('❌ Error sending message:', chrome.runtime.lastError);
-                } else {
-                    console.log('✅ Etsy data sent successfully');
-                }
-            });
+        if (data.listingId && data.shopId) {
+            console.log('✅ Etsy data complete');
+            publishEtsyData();
             return;
         }
 
-        // Retry if not found
         if (tries < maxRetries) {
             setTimeout(check, interval);
         } else {
-            console.error(`❌ Failed to scrape Etsy data after ${maxRetries} attempts`);
-            console.error('   Found:', { csrfToken: !!csrfToken, listingId, shopId });
+            console.error('❌ Failed to scrape Etsy data after retries', data);
         }
     };
 
     check();
 }
 
-// Start scraping when page loads
-if (document.readyState === 'loading') {
-    window.addEventListener('load', () => waitForEtsyData());
-} else {
+function formatReviewDate(raw) {
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return raw;
+    return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+}
+
+function extractReviewHtml(payload) {
+    const root = payload?.output?.reviews ?? payload?.output;
+    if (!root) return '';
+
+    if (typeof root === 'string') {
+        return root;
+    }
+
+    if (typeof root === 'object') {
+        const preferredKeys = [
+            'listing_reviews',
+            'shop_reviews',
+            'reviews',
+            'html',
+            'body',
+            'content',
+            'markup'
+        ];
+
+        for (const key of preferredKeys) {
+            const value = root[key];
+            if (typeof value === 'string' && value.trim()) {
+                return value;
+            }
+        }
+
+        for (const value of Object.values(root)) {
+            if (typeof value === 'string' && value.includes('review')) {
+                return value;
+            }
+        }
+    }
+
+    return '';
+}
+
+function parseReviewsFromHtml(htmlString) {
+    const doc = new DOMParser().parseFromString(htmlString, 'text/html');
+
+    let reviewNodes = doc.querySelectorAll(
+        '.review-card, [data-review-card], [data-region="review-card"], [data-region*="review"]'
+    );
+
+    if (reviewNodes.length === 0) {
+        const ratingInputs = doc.querySelectorAll('input[name="rating"]');
+        reviewNodes = Array.from(ratingInputs)
+            .map((input) => input.closest('.review-card, [data-review-id], li, article, .wt-grid__item-xs-12, .v2-listing-card'))
+            .filter(Boolean);
+    }
+
+    const seen = new Set();
+
+    return Array.from(reviewNodes).map((node) => {
+        const reviewer = node.querySelector(
+            'a.wt-text-link-no-underline.wt-text-title-small, [data-reviewer-name], .shop2-review-byline a, .wt-text-caption a'
+        )?.textContent?.trim() || 'Anonymous';
+
+        const ratingValue = node.querySelector('input[name="rating"]')?.value ||
+            node.querySelector('[aria-label*="out of 5"]')?.getAttribute('aria-label')?.match(/(\d)/)?.[1] ||
+            node.querySelector('[aria-label*="star"]')?.getAttribute('aria-label')?.match(/(\d)/)?.[1] ||
+            '0';
+
+        const text = node.querySelector(
+            '.wt-text-body, [data-review-text], .prose, p[data-review-text], .wt-break-word'
+        )?.textContent?.trim() || '';
+
+        const item = node.querySelector('a[data-review-link], [data-review-listing], .wt-text-truncate a')?.textContent?.trim() || '';
+        const dateRaw = node.querySelector('.wt-text-body-small, [data-review-date], time, .wt-text-caption')?.textContent?.trim() || '';
+
+        const key = `${reviewer}|${text}|${dateRaw}`;
+        if (seen.has(key)) {
+            return null;
+        }
+        seen.add(key);
+
+        return {
+            reviewer,
+            rating: parseInt(ratingValue, 10) || 0,
+            text,
+            item,
+            date: formatReviewDate(dateRaw)
+        };
+    }).filter((review) => review && (review.text || review.rating > 0));
+}
+
+function parseReviewsFromDocument() {
+    return parseReviewsFromHtml(document.documentElement.outerHTML);
+}
+
+async function ensureReviewsSectionVisible() {
+    const selectors = [
+        'button[aria-controls*="review"]',
+        'a[href*="#reviews"]',
+        '[data-reviews-tab]',
+        '#reviews-tab',
+        'button[id*="reviews"]'
+    ];
+
+    for (const selector of selectors) {
+        const tab = document.querySelector(selector);
+        if (tab) {
+            tab.click();
+            await sleep(800);
+            break;
+        }
+    }
+
+    const reviewsAnchor = document.getElementById('reviews') ||
+        document.querySelector('[data-reviews-region], [data-region="reviews"]');
+    reviewsAnchor?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    await sleep(500);
+}
+
+function buildReviewRequestBody(data, page, activeTab) {
+    return {
+        log_performance_metrics: true,
+        specs: {
+            reviews: [
+                'Etsy\\Modules\\ListingPage\\Reviews\\DataComposer',
+                {
+                    listing_id: data.listingId,
+                    shop_id: data.shopId,
+                    render_complete: true,
+                    active_tab: activeTab,
+                    should_lazy_load_images: true,
+                    should_use_pagination: true,
+                    page,
+                    should_show_variations: false,
+                    is_reviews_untabbed_cached: false,
+                    was_landing_from_external_referrer: data.isExternalReferrer,
+                    sort_option: 'Relevancy'
+                }
+            ]
+        },
+        runtime_analysis: false
+    };
+}
+
+async function fetchReviewsViaApi(data, page, activeTab) {
+    const response = await fetch('https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/reviews', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': data.csrfToken,
+            'x-requested-with': 'XMLHttpRequest',
+            accept: '*/*',
+            referer: data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`
+        },
+        credentials: 'include',
+        body: JSON.stringify(buildReviewRequestBody(data, page, activeTab))
+    });
+
+    if (response.status === 429) {
+        throw new Error('Rate limit reached. Please wait and try again.');
+    }
+
+    if (!response.ok) {
+        throw new Error(`Etsy API error: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const htmlString = extractReviewHtml(payload);
+    return parseReviewsFromHtml(htmlString);
+}
+
+function getListingReviewsUrl(data, page) {
+    const basePath = window.location.pathname.replace(/\/reviews\/?$/, '');
+    const suffix = page > 1 ? `?page=${page}` : '';
+    return `https://www.etsy.com${basePath}/reviews${suffix}`;
+}
+
+async function fetchReviewsViaListingPage(data, page) {
+    const response = await fetch(getListingReviewsUrl(data, page), {
+        method: 'GET',
+        headers: {
+            accept: 'text/html,application/xhtml+xml',
+            'x-requested-with': 'XMLHttpRequest',
+            referer: data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`
+        },
+        credentials: 'include'
+    });
+
+    if (!response.ok) {
+        return [];
+    }
+
+    const html = await response.text();
+    return parseReviewsFromHtml(html);
+}
+
+async function fetchReviewPage(data, page) {
+    const apiTabs = ['listing_reviews', 'shop_reviews'];
+
+    for (const activeTab of apiTabs) {
+        const apiReviews = await fetchReviewsViaApi(data, page, activeTab);
+        if (apiReviews.length > 0) {
+            console.log(`✅ Got ${apiReviews.length} reviews via API (${activeTab}, page ${page})`);
+            return apiReviews;
+        }
+    }
+
+    const listingPageReviews = await fetchReviewsViaListingPage(data, page);
+    if (listingPageReviews.length > 0) {
+        console.log(`✅ Got ${listingPageReviews.length} reviews via /reviews page ${page}`);
+        return listingPageReviews;
+    }
+
+    if (page === 1) {
+        const domReviews = parseReviewsFromDocument();
+        if (domReviews.length > 0) {
+            console.log(`✅ Got ${domReviews.length} reviews from listing DOM`);
+            return domReviews;
+        }
+    }
+
+    return [];
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMin = 1, delayMax = 3 } = {}) {
+    const data = collectEtsyData();
+
+    if (!data.listingId || !data.shopId) {
+        throw new Error('Missing listing or shop ID on this page');
+    }
+
+    if (!data.csrfToken) {
+        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
+    }
+
+    publishEtsyData();
+    await ensureReviewsSectionVisible();
+
+    const allReviews = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+        const pageReviews = await fetchReviewPage(data, page);
+
+        if (pageReviews.length === 0) {
+            break;
+        }
+
+        for (const review of pageReviews) {
+            if (!isProUser && allReviews.length >= freeLimit) {
+                hasMore = false;
+                break;
+            }
+
+            const duplicate = allReviews.some((existing) =>
+                existing.reviewer === review.reviewer &&
+                existing.text === review.text &&
+                existing.date === review.date
+            );
+            if (!duplicate) {
+                allReviews.push(review);
+            }
+        }
+
+        chrome.runtime.sendMessage({
+            type: 'reviewProgress',
+            listingId: data.listingId,
+            shopId: data.shopId,
+            page,
+            total: allReviews.length,
+            reviews: allReviews,
+            limitReached: !isProUser && allReviews.length >= freeLimit
+        });
+
+        if (!hasMore || (!isProUser && allReviews.length >= freeLimit)) {
+            break;
+        }
+
+        page += 1;
+        const randomDelay = (delayMin + Math.random() * (delayMax - delayMin)) * 1000;
+        await sleep(randomDelay);
+    }
+
+    if (allReviews.length === 0) {
+        throw new Error('No reviews found for this listing. Open the listing Reviews tab on Etsy and try again.');
+    }
+
+    return {
+        listingId: data.listingId,
+        shopId: data.shopId,
+        reviews: allReviews,
+        limitReached: !isProUser && allReviews.length >= freeLimit
+    };
+}
+
+let activeFetchPromise = null;
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'subscriptionActive') {
+        sendResponse({ success: true });
+        return false;
+    }
+
+    if (request.action === 'collectEtsyData') {
+        const data = collectEtsyData();
+        if (data.listingId && data.shopId) {
+            publishEtsyData();
+        }
+        sendResponse(data);
+        return false;
+    }
+
+    if (request.action === 'startReviewFetch') {
+        if (activeFetchPromise) {
+            sendResponse({ error: 'Review fetch already in progress on this tab' });
+            return false;
+        }
+
+        activeFetchPromise = fetchReviewsFromPage(request)
+            .then((result) => {
+                chrome.runtime.sendMessage({ type: 'reviewComplete', ...result });
+                sendResponse({ success: true, ...result });
+            })
+            .catch((error) => {
+                chrome.runtime.sendMessage({
+                    type: 'reviewError',
+                    message: error.message || 'Failed to fetch reviews'
+                });
+                sendResponse({ error: error.message || 'Failed to fetch reviews' });
+            })
+            .finally(() => {
+                activeFetchPromise = null;
+            });
+
+        return true;
+    }
+
+    return false;
+});
+
+function startScraping() {
+    if (!LISTING_ID_PATTERN.test(window.location.pathname)) {
+        console.log('Not a listing page, skipping scrape');
+        return;
+    }
+
     waitForEtsyData();
 }
 
-// Listen for subscription status (for premium features)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'subscriptionActive') {
-        console.log('Premium features activated:', request.subscription);
-        // Add premium features here if needed
-        sendResponse({ success: true });
+if (document.readyState === 'loading') {
+    window.addEventListener('load', startScraping);
+} else {
+    startScraping();
+}
+
+let lastPathname = window.location.pathname;
+const observer = new MutationObserver(() => {
+    if (window.location.pathname !== lastPathname && LISTING_ID_PATTERN.test(window.location.pathname)) {
+        lastPathname = window.location.pathname;
+        console.log('📍 Listing navigation detected:', window.location.href);
+        waitForEtsyData();
     }
-    return true;
 });
 
-console.log('Content script initialized');
+observer.observe(document.documentElement, { childList: true, subtree: true });
 
+console.log('Content script initialized');

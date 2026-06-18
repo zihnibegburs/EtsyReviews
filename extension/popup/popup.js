@@ -298,7 +298,6 @@ async function requestEtsyData() {
             console.log('✅ Active tab is an Etsy listing page');
             console.log('🔄 Triggering content script to collect fresh data...');
 
-            // Inject and execute content script to collect fresh data
             try {
                 await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
@@ -309,8 +308,13 @@ async function requestEtsyData() {
                 console.log('⚠️ Content script may already be loaded:', error.message);
             }
 
-            // Wait a moment for content script to collect data
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            try {
+                await chrome.tabs.sendMessage(tab.id, { action: 'collectEtsyData' });
+            } catch (error) {
+                console.log('⚠️ Could not request fresh Etsy data yet:', error.message);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 1500));
         } else {
             console.log('⚠️ Active tab is not an Etsy listing page');
         }
@@ -417,13 +421,20 @@ refreshBtn.addEventListener('click', async () => {
     }
 });
 
-fetchReviews.addEventListener('click', () => {
+fetchReviews.addEventListener('click', async () => {
     if (!isAuthenticated) {
         alert('Please login first');
         return;
     }
-    console.log('📋 Opening reviews page...');
-    chrome.tabs.create({ url: chrome.runtime.getURL("output.html") });
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url || !tab.url.includes('etsy.com/listing/')) {
+        alert('Please open an Etsy listing page first.\n\nExample:\nhttps://www.etsy.com/listing/1020427168/...');
+        return;
+    }
+
+    console.log('📋 Opening reviews page for tab:', tab.id);
+    chrome.tabs.create({ url: chrome.runtime.getURL(`output.html?tabId=${tab.id}`) });
 });
 
 // =============== SUBSCRIPTION ===============

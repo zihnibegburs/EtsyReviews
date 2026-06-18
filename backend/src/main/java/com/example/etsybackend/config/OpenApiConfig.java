@@ -21,7 +21,7 @@ import org.springframework.context.annotation.Configuration;
         ),
         servers = {
                 @Server(url = "http://localhost:8081", description = "Local Development Server"),
-                @Server(url = "https://api.yourapp.com", description = "Production Server")
+                @Server(url = "https://etsy-backend-u3x2.onrender.com", description = "Production Server")
         }
 )
 @SecurityScheme(
