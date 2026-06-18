@@ -24,19 +24,16 @@ else
   git remote add origin "https://github.com/${GITHUB_USER}/${REPO_NAME}.git"
 fi
 
-# Repo yoksa oluştur ve push et
-if gh repo view "${GITHUB_USER}/${REPO_NAME}" >/dev/null 2>&1; then
-  echo "Repo mevcut, push ediliyor..."
-  git push -u origin main
-else
+# Repo yoksa oluştur
+if ! gh repo view "${GITHUB_USER}/${REPO_NAME}" >/dev/null 2>&1; then
   echo "Repo oluşturuluyor: ${GITHUB_USER}/${REPO_NAME}"
-  gh repo create "${REPO_NAME}" \
+  gh repo create "${GITHUB_USER}/${REPO_NAME}" \
     --public \
-    --source=. \
-    --remote=origin \
-    --description "Etsy review scraper Chrome extension with Spring Boot API and Stripe subscriptions" \
-    --push
+    --description "Etsy review scraper Chrome extension with Spring Boot API and Stripe subscriptions"
 fi
+
+echo "Push ediliyor..."
+git push -u origin main
 
 echo ""
 echo "Tamam: https://github.com/${GITHUB_USER}/${REPO_NAME}"
