@@ -59,15 +59,6 @@ async function ensureContentScript(tabId) {
         console.log('Content script may already be loaded:', error.message);
     }
 }
-    try {
-        await chrome.scripting.executeScript({
-            target: { tabId },
-            files: ['content/content.js']
-        });
-    } catch (error) {
-        console.log('Content script may already be loaded:', error.message);
-    }
-}
 
 function exportReviewsToCSV() {
     const start = (currentPage - 1) * REVIEWS_PER_PAGE;

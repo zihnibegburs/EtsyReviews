@@ -537,11 +537,49 @@ function findNextReviewPageButton() {
     return pageLinks.find((link) => link.getAttribute('href')?.includes(`page=${nextPage}`)) || null;
 }
 
-function getReviewApiReferer(data, page) {
-    if (window.location.pathname.includes('/reviews')) {
-        return page > 1 ? getListingReviewsUrl(data, page - 1) : getListingReviewsUrl(data, 1);
+function getListingReferer(listingId) {
+    return `https://www.etsy.com/listing/${listingId}`;
+}
+
+async function refreshCsrfToken(data) {
+    const pageToken = extractCsrfToken();
+    if (pageToken) {
+        data.csrfToken = pageToken;
+        return pageToken;
     }
-    return data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`;
+
+    try {
+        const response = await fetch('https://www.etsy.com/', {
+            credentials: 'include',
+            headers: { accept: 'text/html' }
+        });
+        if (!response.ok) {
+            return data.csrfToken || null;
+        }
+
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const token = doc.querySelector('meta[name="csrf_nonce"]')?.content ||
+            doc.querySelector('meta[name="x-csrf-token"]')?.content ||
+            null;
+
+        if (token) {
+            data.csrfToken = token;
+        }
+        return token;
+    } catch {
+        return data.csrfToken || null;
+    }
+}
+
+function buildEtsyApiHeaders(data, listingId) {
+    return {
+        'Content-Type': 'application/json',
+        'x-csrf-token': data.csrfToken,
+        'x-requested-with': 'XMLHttpRequest',
+        accept: '*/*',
+        referer: getListingReferer(listingId)
+    };
 }
 
 function buildReviewRequestBody(data, page, activeTab) {
@@ -551,16 +589,16 @@ function buildReviewRequestBody(data, page, activeTab) {
             reviews: [
                 'Etsy\\Modules\\ListingPage\\Reviews\\DataComposer',
                 {
-                    listing_id: data.listingId,
-                    shop_id: data.shopId,
-                    render_complete: page === 1,
+                    listing_id: Number(data.listingId),
+                    shop_id: Number(data.shopId),
+                    render_complete: true,
                     active_tab: activeTab,
                     should_lazy_load_images: true,
                     should_use_pagination: true,
                     page,
                     should_show_variations: false,
-                    is_reviews_untabbed_cached: page > 1,
-                    was_landing_from_external_referrer: data.isExternalReferrer,
+                    is_reviews_untabbed_cached: false,
+                    was_landing_from_external_referrer: !!data.isExternalReferrer,
                     sort_option: 'Relevancy'
                 }
             ]
@@ -570,15 +608,14 @@ function buildReviewRequestBody(data, page, activeTab) {
 }
 
 async function fetchReviewsViaApi(data, page, activeTab) {
+    await refreshCsrfToken(data);
+    if (!data.csrfToken) {
+        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
+    }
+
     const response = await fetch('https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/reviews', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-csrf-token': data.csrfToken,
-            'x-requested-with': 'XMLHttpRequest',
-            accept: '*/*',
-            referer: getReviewApiReferer(data, page)
-        },
+        headers: buildEtsyApiHeaders(data, data.listingId),
         credentials: 'include',
         body: JSON.stringify(buildReviewRequestBody(data, page, activeTab))
     });
@@ -592,7 +629,9 @@ async function fetchReviewsViaApi(data, page, activeTab) {
     }
 
     const payload = await response.json();
-    const htmlString = extractReviewHtml(payload, activeTab);
+    const htmlString = typeof payload?.output?.reviews === 'string'
+        ? payload.output.reviews
+        : extractReviewHtml(payload, activeTab);
     const reviews = parseReviewsFromHtml(htmlString);
     const hasMore = extractHasMoreReviews(payload, reviews.length);
 
@@ -648,9 +687,118 @@ function collectReviewIds(reviews) {
     return new Set(reviews.map((review) => review.reviewId).filter(Boolean));
 }
 
-async function fetchReviewsViaDeepDivePanel(data, { isProUser, freeLimit, delayMin, delayMax, onProgress }) {
-    await openDeepDiveReviewsPanel();
+const DEEP_DIVE_REVIEWS_API = 'https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/deep_dive_reviews';
+const DEEP_DIVE_REVIEW_SCOPE = 'shopReviews';
 
+function buildDeepDiveReviewRequestBody(data, page) {
+    return {
+        log_performance_metrics: true,
+        specs: {
+            deep_dive_reviews: [
+                'Etsy\\Modules\\ListingPage\\Reviews\\DeepDive\\AsyncApiSpec',
+                {
+                    listing_id: Number(data.listingId),
+                    shop_id: Number(data.shopId),
+                    scope: DEEP_DIVE_REVIEW_SCOPE,
+                    page,
+                    sort_option: 'Relevancy',
+                    rating_filter: null,
+                    tag_filters: [],
+                    review_highlight_transaction_id: null,
+                    should_lazy_load_images: false,
+                    should_show_variations: true,
+                    photo_aesthetics_ranking_dataset_version: 'v1'
+                }
+            ]
+        },
+        runtime_analysis: false
+    };
+}
+
+function extractDeepDiveReviewHtml(payload) {
+    const root = payload?.output?.deep_dive_reviews ?? payload?.output;
+    if (!root) return '';
+
+    if (typeof root === 'string') {
+        return root;
+    }
+
+    if (typeof root === 'object') {
+        const preferredKeys = [
+            'deep_dive_reviews',
+            'html',
+            'body',
+            'content',
+            'markup',
+            'reviews'
+        ];
+
+        for (const key of preferredKeys) {
+            const value = root[key];
+            if (typeof value === 'string' && value.trim()) {
+                return value;
+            }
+        }
+
+        for (const value of Object.values(root)) {
+            if (typeof value === 'string' && value.includes('data-review-region')) {
+                return value;
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractDeepDiveHasMore(payload, reviewCount) {
+    const root = payload?.output?.deep_dive_reviews;
+    if (root && typeof root === 'object') {
+        if (root.has_more === false || root.has_more_reviews === false) {
+            return false;
+        }
+        if (root.has_more === true || root.has_more_reviews === true) {
+            return true;
+        }
+        if (typeof root.total_pages === 'number' && typeof root.page === 'number') {
+            return root.page < root.total_pages;
+        }
+    }
+
+    return reviewCount > 0 ? null : false;
+}
+
+async function fetchDeepDiveReviewsViaApi(data, page) {
+    await refreshCsrfToken(data);
+    if (!data.csrfToken) {
+        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
+    }
+
+    const response = await fetch(DEEP_DIVE_REVIEWS_API, {
+        method: 'POST',
+        headers: buildEtsyApiHeaders(data, data.listingId),
+        credentials: 'include',
+        body: JSON.stringify(buildDeepDiveReviewRequestBody(data, page))
+    });
+
+    if (response.status === 429) {
+        throw new Error('Rate limit reached. Please wait and try again.');
+    }
+
+    if (!response.ok) {
+        throw new Error(`Etsy deep dive API error: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const htmlString = typeof payload?.output?.deep_dive_reviews === 'string'
+        ? payload.output.deep_dive_reviews
+        : extractDeepDiveReviewHtml(payload);
+    const reviews = parseReviewsFromHtml(htmlString);
+    const hasMore = extractDeepDiveHasMore(payload, reviews.length);
+
+    return { reviews, hasMore, htmlEmpty: !htmlString.trim() };
+}
+
+async function fetchReviewsViaDeepDiveDom({ isProUser, freeLimit, delayMin, delayMax, onProgress }) {
     const allReviews = [];
     let page = 1;
     let stagnantRounds = 0;
@@ -670,7 +818,7 @@ async function fetchReviewsViaDeepDivePanel(data, { isProUser, freeLimit, delayM
             }
         }
 
-        console.log(`✅ Deep dive page ${page}: ${pageReviews.length} visible, ${addedCount} new (total ${allReviews.length})`);
+        console.log(`✅ Deep dive DOM page ${page}: ${pageReviews.length} visible, ${addedCount} new`);
 
         if (onProgress) {
             onProgress(allReviews, page);
@@ -682,7 +830,6 @@ async function fetchReviewsViaDeepDivePanel(data, { isProUser, freeLimit, delayM
 
         const nextButton = findNextDeepDivePageButton();
         if (!nextButton) {
-            console.log('⏹️ No Next button — reached last review page');
             break;
         }
 
@@ -698,20 +845,89 @@ async function fetchReviewsViaDeepDivePanel(data, { isProUser, freeLimit, delayM
 
         const loaded = await waitForNewDeepDiveReviews(previousIds);
         if (!loaded && stagnantRounds >= 1) {
-            console.log('⏹️ Next page did not load new reviews');
             break;
         }
 
         page += 1;
-        const randomDelay = (delayMin + Math.random() * (delayMax - delayMin)) * 1000;
-        await sleep(randomDelay);
+        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
     }
 
     return allReviews;
 }
 
+async function fetchReviewsViaDeepDivePanel(data, { isProUser, freeLimit, delayMin, delayMax, onProgress }) {
+    if (!data.csrfToken) {
+        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
+    }
+
+    try {
+        await openDeepDiveReviewsPanel();
+    } catch (error) {
+        console.warn('Show all click failed, continuing with deep dive API:', error.message);
+    }
+
+    const allReviews = [];
+    let page = 1;
+    let duplicatePages = 0;
+
+    while (page <= 500) {
+        const result = await fetchDeepDiveReviewsViaApi(data, page);
+        const pageReviews = result.reviews;
+
+        if (pageReviews.length === 0) {
+            break;
+        }
+
+        let addedCount = 0;
+        for (const review of pageReviews) {
+            if (!isProUser && allReviews.length >= freeLimit) {
+                break;
+            }
+
+            if (!isDuplicateReview(review, allReviews)) {
+                allReviews.push(review);
+                addedCount += 1;
+            }
+        }
+
+        console.log(`✅ Deep dive API page ${page}: ${pageReviews.length} fetched, ${addedCount} new (total ${allReviews.length})`);
+
+        if (onProgress) {
+            onProgress(allReviews, page);
+        }
+
+        if (!isProUser && allReviews.length >= freeLimit) {
+            break;
+        }
+
+        if (addedCount === 0) {
+            duplicatePages += 1;
+            if (duplicatePages >= 2) {
+                break;
+            }
+        } else {
+            duplicatePages = 0;
+        }
+
+        if (result.hasMore === false) {
+            console.log(`⏹️ Deep dive API: no more pages after page ${page}`);
+            break;
+        }
+
+        page += 1;
+        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
+    }
+
+    if (allReviews.length > 0) {
+        return allReviews;
+    }
+
+    console.warn('Deep dive API returned no reviews, falling back to DOM pagination');
+    return fetchReviewsViaDeepDiveDom({ isProUser, freeLimit, delayMin, delayMax, onProgress });
+}
+
 async function fetchReviewPage(data, page, preferredTab) {
-    const apiTabs = preferredTab ? [preferredTab] : ['listing_reviews', 'shop_reviews'];
+    const apiTabs = preferredTab ? [preferredTab] : ['shop_reviews', 'listing_reviews'];
 
     for (const activeTab of apiTabs) {
         const apiResult = await fetchReviewsViaApi(data, page, activeTab);
