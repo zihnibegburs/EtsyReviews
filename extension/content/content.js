@@ -162,7 +162,7 @@ function formatReviewDate(raw) {
     return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
 }
 
-function extractReviewHtml(payload, activeTab = 'shop_reviews') {
+function extractReviewHtml(payload, activeTab = 'listing_reviews') {
     const root = payload?.output?.reviews ?? payload?.output;
     if (!root) return '';
 
@@ -228,7 +228,10 @@ function parseReviewsFromHtml(htmlString) {
             '.wt-text-body, [data-review-text], .prose, p[data-review-text], .wt-break-word'
         )?.textContent?.trim() || '';
 
-        const item = node.querySelector('a[data-review-link], [data-review-listing], .wt-text-truncate a')?.textContent?.trim() || '';
+        const itemLinkEl = node.querySelector('a[data-review-link], [data-review-listing], .wt-text-truncate a');
+        const item = itemLinkEl?.textContent?.trim() || '';
+        const itemUrl = itemLinkEl?.getAttribute('href') || '';
+        const itemListingId = itemUrl.match(/\/listing\/(\d+)/)?.[1];
         const dateRaw = node.querySelector('.wt-text-body-small, [data-review-date], time, .wt-text-caption')?.textContent?.trim() || '';
 
         const key = `${reviewer}|${text}|${dateRaw}`;
@@ -242,6 +245,8 @@ function parseReviewsFromHtml(htmlString) {
             rating: parseInt(ratingValue, 10) || 0,
             text,
             item,
+            itemUrl,
+            listingId: itemListingId ? parseInt(itemListingId, 10) : null,
             date: formatReviewDate(dateRaw)
         };
     }).filter((review) => review && (review.text || review.rating > 0));
@@ -249,6 +254,65 @@ function parseReviewsFromHtml(htmlString) {
 
 function parseReviewsFromDocument() {
     return parseReviewsFromHtml(document.documentElement.outerHTML);
+}
+
+function findViewAllReviewsElement() {
+    for (const span of document.querySelectorAll('span.wt-pl-xs-2.wt-pr-xs-2, span')) {
+        if (/view all reviews for this item/i.test(span.textContent.trim())) {
+            return span.closest('a, button') || span;
+        }
+    }
+
+    const listingId = extractListingId();
+    if (listingId) {
+        return document.querySelector(`a[href*="/listing/${listingId}/reviews"]`);
+    }
+
+    return document.querySelector('a[href*="/reviews"]');
+}
+
+function getListingReviewsUrl(data, page) {
+    const suffix = page > 1 ? `?page=${page}` : '';
+    return `https://www.etsy.com/listing/${data.listingId}/reviews${suffix}`;
+}
+
+function extractPaginationInfo(html, currentPage) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    const nextLink = doc.querySelector(
+        'nav[aria-label*="Pagination"] a[rel="next"], ' +
+        '[data-clg-id="WtPagination"] a[aria-label*="Next"], ' +
+        'a.wt-pagination__item--next, ' +
+        'a[aria-label="Next page"]'
+    );
+    if (nextLink && nextLink.getAttribute('aria-disabled') !== 'true') {
+        return { hasMore: true };
+    }
+
+    let maxPage = currentPage;
+    doc.querySelectorAll('a[href*="page="]').forEach((anchor) => {
+        const match = (anchor.getAttribute('href') || '').match(/[?&]page=(\d+)/);
+        if (match) {
+            maxPage = Math.max(maxPage, parseInt(match[1], 10));
+        }
+    });
+
+    if (maxPage > currentPage) {
+        return { hasMore: true };
+    }
+
+    const pageText = doc.body?.textContent || '';
+    const totalMatch = pageText.match(/(\d+)\s*results?,?\s*page\s*(\d+)\s*of\s*(\d+)/i) ||
+        pageText.match(/page\s*(\d+)\s*of\s*(\d+)/i);
+    if (totalMatch) {
+        const current = parseInt(totalMatch[totalMatch.length - 2], 10);
+        const total = parseInt(totalMatch[totalMatch.length - 1], 10);
+        if (!Number.isNaN(current) && !Number.isNaN(total)) {
+            return { hasMore: current < total };
+        }
+    }
+
+    return { hasMore: null };
 }
 
 async function ensureReviewsSectionVisible() {
@@ -275,7 +339,96 @@ async function ensureReviewsSectionVisible() {
     await sleep(500);
 }
 
-function buildReviewRequestBody(data, page) {
+async function activateListingReviewsContext(data) {
+    await ensureReviewsSectionVisible();
+
+    if (window.location.pathname.includes('/reviews')) {
+        data.reviewsPageUrl = window.location.href.split('?')[0];
+        console.log('📍 Already on listing reviews page');
+        return data.reviewsPageUrl;
+    }
+
+    const viewAll = findViewAllReviewsElement();
+    if (!viewAll) {
+        data.reviewsPageUrl = getListingReviewsUrl(data, 1);
+        console.log('ℹ️ "View all reviews" not found, using', data.reviewsPageUrl);
+        return data.reviewsPageUrl;
+    }
+
+    const link = viewAll.tagName === 'A' ? viewAll : viewAll.closest('a');
+    const href = link?.getAttribute('href');
+
+    if (href?.includes('/reviews')) {
+        data.reviewsPageUrl = new URL(href, window.location.origin).href.split('?')[0];
+        console.log('📍 Found listing reviews URL from button:', data.reviewsPageUrl);
+    } else {
+        console.log('🖱️ Clicking "View all reviews for this item"');
+        viewAll.click();
+        await sleep(2000);
+
+        if (window.location.pathname.includes('/reviews')) {
+            data.reviewsPageUrl = window.location.href.split('?')[0];
+        } else {
+            data.reviewsPageUrl = getListingReviewsUrl(data, 1);
+        }
+    }
+
+    try {
+        await fetch(getListingReviewsUrl(data, 1), {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                accept: 'text/html,application/xhtml+xml',
+                referer: data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`
+            }
+        });
+    } catch {
+        // warm-up is best-effort
+    }
+
+    return data.reviewsPageUrl;
+}
+
+function filterReviewsForListing(reviews, listingId) {
+    if (!listingId) return reviews;
+    return reviews.filter((review) => {
+        if (review.listingId) {
+            return review.listingId === listingId;
+        }
+        if (review.itemUrl) {
+            return review.itemUrl.includes(`/listing/${listingId}`);
+        }
+        return true;
+    });
+}
+
+function findNextReviewPageButton() {
+    const selectors = [
+        'nav[aria-label*="Pagination"] a[rel="next"]:not([aria-disabled="true"])',
+        '[data-clg-id="WtPagination"] a[aria-label*="Next"]:not([aria-disabled="true"])',
+        'a.wt-pagination__item--next:not([aria-disabled="true"])',
+        'a[aria-label="Next page"]:not([aria-disabled="true"])'
+    ];
+
+    for (const selector of selectors) {
+        const button = document.querySelector(selector);
+        if (button) return button;
+    }
+
+    const pageLinks = Array.from(document.querySelectorAll('a[href*="page="]'));
+    const current = new URLSearchParams(window.location.search).get('page') || '1';
+    const nextPage = String(parseInt(current, 10) + 1);
+    return pageLinks.find((link) => link.getAttribute('href')?.includes(`page=${nextPage}`)) || null;
+}
+
+function getReviewApiReferer(data, page) {
+    if (window.location.pathname.includes('/reviews')) {
+        return page > 1 ? getListingReviewsUrl(data, page - 1) : getListingReviewsUrl(data, 1);
+    }
+    return data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`;
+}
+
+function buildReviewRequestBody(data, page, activeTab) {
     return {
         log_performance_metrics: true,
         specs: {
@@ -284,13 +437,13 @@ function buildReviewRequestBody(data, page) {
                 {
                     listing_id: data.listingId,
                     shop_id: data.shopId,
-                    render_complete: true,
-                    active_tab: 'shop_reviews',
+                    render_complete: page === 1,
+                    active_tab: activeTab,
                     should_lazy_load_images: true,
                     should_use_pagination: true,
                     page,
                     should_show_variations: false,
-                    is_reviews_untabbed_cached: false,
+                    is_reviews_untabbed_cached: page > 1,
                     was_landing_from_external_referrer: data.isExternalReferrer,
                     sort_option: 'Relevancy'
                 }
@@ -300,13 +453,7 @@ function buildReviewRequestBody(data, page) {
     };
 }
 
-const REVIEW_ACTIVE_TAB = 'shop_reviews';
-
-async function fetchReviewsViaApi(data, page) {
-    const referer = page > 1
-        ? getListingReviewsUrl(data, page)
-        : (data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`);
-
+async function fetchReviewsViaApi(data, page, activeTab) {
     const response = await fetch('https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/reviews', {
         method: 'POST',
         headers: {
@@ -314,10 +461,10 @@ async function fetchReviewsViaApi(data, page) {
             'x-csrf-token': data.csrfToken,
             'x-requested-with': 'XMLHttpRequest',
             accept: '*/*',
-            referer
+            referer: getReviewApiReferer(data, page)
         },
         credentials: 'include',
-        body: JSON.stringify(buildReviewRequestBody(data, page))
+        body: JSON.stringify(buildReviewRequestBody(data, page, activeTab))
     });
 
     if (response.status === 429) {
@@ -329,11 +476,11 @@ async function fetchReviewsViaApi(data, page) {
     }
 
     const payload = await response.json();
-    const htmlString = extractReviewHtml(payload, REVIEW_ACTIVE_TAB);
+    const htmlString = extractReviewHtml(payload, activeTab);
     const reviews = parseReviewsFromHtml(htmlString);
     const hasMore = extractHasMoreReviews(payload, reviews.length);
 
-    return { reviews, hasMore, htmlEmpty: !htmlString.trim() };
+    return { reviews, hasMore, htmlEmpty: !htmlString.trim(), activeTab };
 }
 
 function extractHasMoreReviews(payload, reviewCount) {
@@ -362,57 +509,131 @@ function isDuplicateReview(review, existingReviews) {
     );
 }
 
-async function fetchReviewPage(data, page) {
-    const result = await fetchReviewsViaApi(data, page);
-    if (result.reviews.length > 0) {
-        console.log(`✅ Got ${result.reviews.length} reviews via API (${REVIEW_ACTIVE_TAB}, page ${page})`);
-        return { reviews: result.reviews, hasMore: result.hasMore };
-    }
+async function fetchReviewPage(data, page, preferredTab) {
+    const apiTabs = preferredTab ? [preferredTab] : ['listing_reviews', 'shop_reviews'];
 
-    if (result.htmlEmpty) {
-        return { reviews: [], hasMore: false };
-    }
+    for (const activeTab of apiTabs) {
+        const apiResult = await fetchReviewsViaApi(data, page, activeTab);
+        let reviews = apiResult.reviews;
 
-    const listingPageReviews = await fetchReviewsViaListingPage(data, page);
-    if (listingPageReviews.length > 0) {
-        console.log(`✅ Got ${listingPageReviews.length} reviews via /reviews page ${page}`);
-        return { reviews: listingPageReviews, hasMore: null };
-    }
+        if (activeTab === 'shop_reviews') {
+            reviews = filterReviewsForListing(reviews, data.listingId);
+        }
 
-    if (page === 1) {
-        const domReviews = parseReviewsFromDocument();
-        if (domReviews.length > 0) {
-            console.log(`✅ Got ${domReviews.length} reviews from listing DOM`);
-            return { reviews: domReviews, hasMore: null };
+        if (reviews.length > 0) {
+            console.log(`✅ Got ${reviews.length} reviews via API (${activeTab}, page ${page})`);
+            return {
+                reviews,
+                hasMore: apiResult.hasMore,
+                activeTab
+            };
         }
     }
 
-    return { reviews: [], hasMore: false };
+    if (page === 1) {
+        const htmlResult = await fetchReviewsViaListingPage(data, page);
+        if (htmlResult.reviews.length > 0) {
+            console.log(`✅ Got ${htmlResult.reviews.length} reviews via /reviews HTML page ${page}`);
+            return {
+                reviews: htmlResult.reviews,
+                hasMore: htmlResult.hasMore,
+                activeTab: preferredTab
+            };
+        }
+
+        const domReviews = parseReviewsFromDocument();
+        if (domReviews.length > 0) {
+            console.log(`✅ Got ${domReviews.length} reviews from page DOM`);
+            return {
+                reviews: domReviews,
+                hasMore: null,
+                activeTab: preferredTab
+            };
+        }
+    }
+
+    return { reviews: [], hasMore: false, activeTab: preferredTab };
 }
 
-function getListingReviewsUrl(data, page) {
-    const basePath = window.location.pathname.replace(/\/reviews\/?$/, '');
-    const suffix = page > 1 ? `?page=${page}` : '';
-    return `https://www.etsy.com${basePath}/reviews${suffix}`;
+async function fetchReviewsViaDomPagination(data, allReviews, { isProUser, freeLimit, onProgress } = {}) {
+    if (!window.location.pathname.includes('/reviews')) {
+        return allReviews;
+    }
+
+    let stagnantRounds = 0;
+    let round = 0;
+
+    while (stagnantRounds < 2 && round < 200) {
+        if (!isProUser && allReviews.length >= freeLimit) {
+            break;
+        }
+
+        round += 1;
+        const pageReviews = parseReviewsFromDocument();
+        let addedCount = 0;
+
+        for (const review of pageReviews) {
+            if (!isProUser && allReviews.length >= freeLimit) {
+                break;
+            }
+
+            if (!isDuplicateReview(review, allReviews)) {
+                allReviews.push(review);
+                addedCount += 1;
+            }
+        }
+
+        if (onProgress) {
+            onProgress(allReviews.length, round);
+        }
+
+        if (addedCount === 0) {
+            stagnantRounds += 1;
+        } else {
+            stagnantRounds = 0;
+        }
+
+        const nextButton = findNextReviewPageButton();
+        if (!nextButton) {
+            break;
+        }
+
+        nextButton.click();
+        await sleep(1800);
+    }
+
+    return allReviews;
 }
 
 async function fetchReviewsViaListingPage(data, page) {
-    const response = await fetch(getListingReviewsUrl(data, page), {
+    const url = getListingReviewsUrl(data, page);
+    const referer = page > 1
+        ? getListingReviewsUrl(data, page - 1)
+        : (data.listingUrl || getListingReviewsUrl(data, 1));
+
+    const response = await fetch(url, {
         method: 'GET',
         headers: {
             accept: 'text/html,application/xhtml+xml',
             'x-requested-with': 'XMLHttpRequest',
-            referer: data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`
+            referer
         },
         credentials: 'include'
     });
 
     if (!response.ok) {
-        return [];
+        return { reviews: [], hasMore: false, htmlEmpty: true };
     }
 
     const html = await response.text();
-    return parseReviewsFromHtml(html);
+    const reviews = parseReviewsFromHtml(html);
+    const pagination = extractPaginationInfo(html, page);
+
+    return {
+        reviews,
+        hasMore: pagination.hasMore ?? (reviews.length > 0 ? null : false),
+        htmlEmpty: !html.trim()
+    };
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -429,18 +650,24 @@ async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMi
     }
 
     publishEtsyData();
-    await ensureReviewsSectionVisible();
+    await activateListingReviewsContext(data);
 
     const allReviews = [];
     let page = 1;
     let hasMore = true;
+    let preferredTab = null;
+    let duplicatePages = 0;
 
     while (hasMore) {
-        const result = await fetchReviewPage(data, page);
+        const result = await fetchReviewPage(data, page, preferredTab);
         const pageReviews = result.reviews;
 
         if (pageReviews.length === 0) {
             break;
+        }
+
+        if (result.activeTab) {
+            preferredTab = result.activeTab;
         }
 
         let addedCount = 0;
@@ -471,8 +698,13 @@ async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMi
         }
 
         if (addedCount === 0) {
-            console.log(`⏹️ No new reviews on page ${page}, stopping pagination`);
-            break;
+            duplicatePages += 1;
+            if (duplicatePages >= 2) {
+                console.log(`⏹️ Same reviews repeated on page ${page}, trying DOM pagination`);
+                break;
+            }
+        } else {
+            duplicatePages = 0;
         }
 
         if (result.hasMore === false) {
@@ -485,8 +717,26 @@ async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMi
         await sleep(randomDelay);
     }
 
+    if (window.location.pathname.includes('/reviews')) {
+        await fetchReviewsViaDomPagination(data, allReviews, {
+            isProUser,
+            freeLimit,
+            onProgress: (total, round) => {
+                chrome.runtime.sendMessage({
+                    type: 'reviewProgress',
+                    listingId: data.listingId,
+                    shopId: data.shopId,
+                    page: round,
+                    total,
+                    reviews: allReviews,
+                    limitReached: !isProUser && total >= freeLimit
+                });
+            }
+        });
+    }
+
     if (allReviews.length === 0) {
-        throw new Error('No reviews found for this listing. Open the listing Reviews tab on Etsy and try again.');
+        throw new Error('No reviews found. Scroll to Reviews on the listing page and try again.');
     }
 
     return {

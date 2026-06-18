@@ -12,7 +12,53 @@ function getTabIdFromUrl() {
     return Number.isNaN(tabId) ? null : tabId;
 }
 
+function getListingReviewsUrlFromTab(tabUrl) {
+    const match = tabUrl.match(/\/listing\/(\d+)/);
+    if (!match) return null;
+    return `https://www.etsy.com/listing/${match[1]}/reviews`;
+}
+
+function waitMs(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function ensureReviewsTab(tabId, tabUrl) {
+    const reviewsUrl = getListingReviewsUrlFromTab(tabUrl);
+    if (!reviewsUrl || tabUrl.includes('/reviews')) {
+        return;
+    }
+
+    await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            chrome.tabs.onUpdated.removeListener(listener);
+            reject(new Error('Timed out opening Etsy reviews page'));
+        }, 45000);
+
+        const listener = (updatedTabId, changeInfo, tab) => {
+            if (updatedTabId !== tabId || changeInfo.status !== 'complete') return;
+            if (!tab.url?.includes('/reviews')) return;
+            clearTimeout(timeout);
+            chrome.tabs.onUpdated.removeListener(listener);
+            resolve();
+        };
+
+        chrome.tabs.onUpdated.addListener(listener);
+        chrome.tabs.update(tabId, { url: reviewsUrl });
+    });
+
+    await waitMs(2000);
+}
+
 async function ensureContentScript(tabId) {
+    try {
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content/content.js']
+        });
+    } catch (error) {
+        console.log('Content script may already be loaded:', error.message);
+    }
+}
     try {
         await chrome.scripting.executeScript({
             target: { tabId },
@@ -247,9 +293,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     showSubscriptionBanner();
-    updateLoading('Connecting to Etsy listing tab...');
+    updateLoading('Opening Etsy reviews page...');
 
+    await ensureReviewsTab(tabId, (await chrome.tabs.get(tabId)).url || '');
     await ensureContentScript(tabId);
+    updateLoading('Fetching reviews...');
 
     const delayConfig = await new Promise((resolve) => {
         chrome.storage.local.get(['fetchDelayMin', 'fetchDelayMax'], (result) => {
