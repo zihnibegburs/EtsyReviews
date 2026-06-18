@@ -21,7 +21,7 @@ backend/src/main/resources/application-local.properties
 !**/src/**/build/
 *.class
 *.jar
-!gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # Node
 node_modules/
