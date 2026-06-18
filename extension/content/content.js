@@ -162,7 +162,7 @@ function formatReviewDate(raw) {
     return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
 }
 
-function extractReviewHtml(payload) {
+function extractReviewHtml(payload, activeTab = 'shop_reviews') {
     const root = payload?.output?.reviews ?? payload?.output;
     if (!root) return '';
 
@@ -172,8 +172,9 @@ function extractReviewHtml(payload) {
 
     if (typeof root === 'object') {
         const preferredKeys = [
-            'listing_reviews',
+            activeTab,
             'shop_reviews',
+            'listing_reviews',
             'reviews',
             'html',
             'body',
@@ -189,7 +190,7 @@ function extractReviewHtml(payload) {
         }
 
         for (const value of Object.values(root)) {
-            if (typeof value === 'string' && value.includes('review')) {
+            if (typeof value === 'string' && value.includes('review-card')) {
                 return value;
             }
         }
@@ -199,16 +200,15 @@ function extractReviewHtml(payload) {
 }
 
 function parseReviewsFromHtml(htmlString) {
-    const doc = new DOMParser().parseFromString(htmlString, 'text/html');
+    if (!htmlString?.trim()) return [];
 
-    let reviewNodes = doc.querySelectorAll(
-        '.review-card, [data-review-card], [data-region="review-card"], [data-region*="review"]'
-    );
+    const doc = new DOMParser().parseFromString(htmlString, 'text/html');
+    let reviewNodes = doc.querySelectorAll('.review-card');
 
     if (reviewNodes.length === 0) {
         const ratingInputs = doc.querySelectorAll('input[name="rating"]');
         reviewNodes = Array.from(ratingInputs)
-            .map((input) => input.closest('.review-card, [data-review-id], li, article, .wt-grid__item-xs-12, .v2-listing-card'))
+            .map((input) => input.closest('.review-card, [data-review-card], [data-review-id], li, article'))
             .filter(Boolean);
     }
 
@@ -275,7 +275,7 @@ async function ensureReviewsSectionVisible() {
     await sleep(500);
 }
 
-function buildReviewRequestBody(data, page, activeTab) {
+function buildReviewRequestBody(data, page) {
     return {
         log_performance_metrics: true,
         specs: {
@@ -285,7 +285,7 @@ function buildReviewRequestBody(data, page, activeTab) {
                     listing_id: data.listingId,
                     shop_id: data.shopId,
                     render_complete: true,
-                    active_tab: activeTab,
+                    active_tab: 'shop_reviews',
                     should_lazy_load_images: true,
                     should_use_pagination: true,
                     page,
@@ -300,7 +300,13 @@ function buildReviewRequestBody(data, page, activeTab) {
     };
 }
 
-async function fetchReviewsViaApi(data, page, activeTab) {
+const REVIEW_ACTIVE_TAB = 'shop_reviews';
+
+async function fetchReviewsViaApi(data, page) {
+    const referer = page > 1
+        ? getListingReviewsUrl(data, page)
+        : (data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`);
+
     const response = await fetch('https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/reviews', {
         method: 'POST',
         headers: {
@@ -308,10 +314,10 @@ async function fetchReviewsViaApi(data, page, activeTab) {
             'x-csrf-token': data.csrfToken,
             'x-requested-with': 'XMLHttpRequest',
             accept: '*/*',
-            referer: data.listingUrl || `https://www.etsy.com/listing/${data.listingId}`
+            referer
         },
         credentials: 'include',
-        body: JSON.stringify(buildReviewRequestBody(data, page, activeTab))
+        body: JSON.stringify(buildReviewRequestBody(data, page))
     });
 
     if (response.status === 429) {
@@ -323,8 +329,65 @@ async function fetchReviewsViaApi(data, page, activeTab) {
     }
 
     const payload = await response.json();
-    const htmlString = extractReviewHtml(payload);
-    return parseReviewsFromHtml(htmlString);
+    const htmlString = extractReviewHtml(payload, REVIEW_ACTIVE_TAB);
+    const reviews = parseReviewsFromHtml(htmlString);
+    const hasMore = extractHasMoreReviews(payload, reviews.length);
+
+    return { reviews, hasMore, htmlEmpty: !htmlString.trim() };
+}
+
+function extractHasMoreReviews(payload, reviewCount) {
+    const root = payload?.output?.reviews;
+    if (root && typeof root === 'object') {
+        if (root.has_more === false || root.has_more_reviews === false) {
+            return false;
+        }
+        if (root.has_more === true || root.has_more_reviews === true) {
+            return true;
+        }
+        if (typeof root.total_pages === 'number' && typeof root.page === 'number') {
+            return root.page < root.total_pages;
+        }
+    }
+
+    // Unknown — caller decides based on whether new reviews were added
+    return reviewCount > 0 ? null : false;
+}
+
+function isDuplicateReview(review, existingReviews) {
+    return existingReviews.some((existing) =>
+        existing.reviewer === review.reviewer &&
+        existing.text === review.text &&
+        existing.date === review.date
+    );
+}
+
+async function fetchReviewPage(data, page) {
+    const result = await fetchReviewsViaApi(data, page);
+    if (result.reviews.length > 0) {
+        console.log(`✅ Got ${result.reviews.length} reviews via API (${REVIEW_ACTIVE_TAB}, page ${page})`);
+        return { reviews: result.reviews, hasMore: result.hasMore };
+    }
+
+    if (result.htmlEmpty) {
+        return { reviews: [], hasMore: false };
+    }
+
+    const listingPageReviews = await fetchReviewsViaListingPage(data, page);
+    if (listingPageReviews.length > 0) {
+        console.log(`✅ Got ${listingPageReviews.length} reviews via /reviews page ${page}`);
+        return { reviews: listingPageReviews, hasMore: null };
+    }
+
+    if (page === 1) {
+        const domReviews = parseReviewsFromDocument();
+        if (domReviews.length > 0) {
+            console.log(`✅ Got ${domReviews.length} reviews from listing DOM`);
+            return { reviews: domReviews, hasMore: null };
+        }
+    }
+
+    return { reviews: [], hasMore: false };
 }
 
 function getListingReviewsUrl(data, page) {
@@ -352,34 +415,6 @@ async function fetchReviewsViaListingPage(data, page) {
     return parseReviewsFromHtml(html);
 }
 
-async function fetchReviewPage(data, page) {
-    const apiTabs = ['listing_reviews', 'shop_reviews'];
-
-    for (const activeTab of apiTabs) {
-        const apiReviews = await fetchReviewsViaApi(data, page, activeTab);
-        if (apiReviews.length > 0) {
-            console.log(`✅ Got ${apiReviews.length} reviews via API (${activeTab}, page ${page})`);
-            return apiReviews;
-        }
-    }
-
-    const listingPageReviews = await fetchReviewsViaListingPage(data, page);
-    if (listingPageReviews.length > 0) {
-        console.log(`✅ Got ${listingPageReviews.length} reviews via /reviews page ${page}`);
-        return listingPageReviews;
-    }
-
-    if (page === 1) {
-        const domReviews = parseReviewsFromDocument();
-        if (domReviews.length > 0) {
-            console.log(`✅ Got ${domReviews.length} reviews from listing DOM`);
-            return domReviews;
-        }
-    }
-
-    return [];
-}
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMin = 1, delayMax = 3 } = {}) {
@@ -401,25 +436,23 @@ async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMi
     let hasMore = true;
 
     while (hasMore) {
-        const pageReviews = await fetchReviewPage(data, page);
+        const result = await fetchReviewPage(data, page);
+        const pageReviews = result.reviews;
 
         if (pageReviews.length === 0) {
             break;
         }
 
+        let addedCount = 0;
         for (const review of pageReviews) {
             if (!isProUser && allReviews.length >= freeLimit) {
                 hasMore = false;
                 break;
             }
 
-            const duplicate = allReviews.some((existing) =>
-                existing.reviewer === review.reviewer &&
-                existing.text === review.text &&
-                existing.date === review.date
-            );
-            if (!duplicate) {
+            if (!isDuplicateReview(review, allReviews)) {
                 allReviews.push(review);
+                addedCount += 1;
             }
         }
 
@@ -434,6 +467,16 @@ async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMi
         });
 
         if (!hasMore || (!isProUser && allReviews.length >= freeLimit)) {
+            break;
+        }
+
+        if (addedCount === 0) {
+            console.log(`⏹️ No new reviews on page ${page}, stopping pagination`);
+            break;
+        }
+
+        if (result.hasMore === false) {
+            console.log(`⏹️ Etsy reported no more review pages after page ${page}`);
             break;
         }
 
