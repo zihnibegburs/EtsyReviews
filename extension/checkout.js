@@ -36,7 +36,7 @@ async function loadStatus() {
         const token = await StorageManager.getToken();
         if (!token) {
             document.getElementById('currentStatus').textContent = 'Not logged in';
-            return;
+            return null;
         }
 
         const response = await fetch(`${API_CONFIG.BASE_URL}/subscription/me`, {
@@ -44,21 +44,45 @@ async function loadStatus() {
         });
 
         const statusEl = document.getElementById('currentStatus');
+        const monthlyBtn = document.getElementById('monthlyBtn');
+        const yearlyBtn = document.getElementById('yearlyBtn');
+
         if (response.ok) {
             const subscription = await response.json();
             if (subscription?.status === 'ACTIVE') {
-                statusEl.textContent = '✓ PRO';
+                const renewsAt = subscription.currentPeriodEnd
+                    ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
+                    : null;
+                statusEl.textContent = renewsAt ? `✓ PRO (renews ${renewsAt})` : '✓ PRO';
                 statusEl.style.color = '#27ae60';
-            } else {
-                statusEl.textContent = 'FREE';
-                statusEl.style.color = '#e67e22';
+                setCheckoutButtonsDisabled(true, 'You already have PRO');
+                return subscription;
             }
-        } else {
-            statusEl.textContent = 'FREE';
-            statusEl.style.color = '#e67e22';
         }
+
+        statusEl.textContent = 'FREE';
+        statusEl.style.color = '#e67e22';
+        setCheckoutButtonsDisabled(false);
+        return null;
     } catch (error) {
         console.error('Error loading status:', error);
+        return null;
+    }
+}
+
+function setCheckoutButtonsDisabled(disabled, label = null) {
+    const monthlyBtn = document.getElementById('monthlyBtn');
+    const yearlyBtn = document.getElementById('yearlyBtn');
+
+    monthlyBtn.disabled = disabled;
+    yearlyBtn.disabled = disabled;
+
+    if (disabled && label) {
+        monthlyBtn.textContent = label;
+        yearlyBtn.textContent = label;
+    } else {
+        monthlyBtn.textContent = 'Get Monthly Plan';
+        yearlyBtn.textContent = 'Get Yearly Plan';
     }
 }
 
@@ -83,6 +107,11 @@ async function openStripeCheckout(priceId) {
         });
 
         const data = await response.json();
+        if (response.status === 409) {
+            alert(data.error || 'You already have an active subscription.');
+            await loadStatus();
+            return;
+        }
         if (!response.ok) {
             throw new Error(data.error || 'Checkout failed');
         }

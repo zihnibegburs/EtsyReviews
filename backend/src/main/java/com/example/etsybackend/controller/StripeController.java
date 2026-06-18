@@ -1,5 +1,6 @@
 package com.example.etsybackend.controller;
 
+import com.example.etsybackend.exception.ActiveSubscriptionException;
 import com.example.etsybackend.model.User;
 import com.example.etsybackend.repository.UserRepository;
 import com.example.etsybackend.service.StripeService;
@@ -73,6 +74,8 @@ public class StripeController {
             response.put("sessionId", session.getId());
             response.put("priceId", priceId);
             return ResponseEntity.ok(response);
+        } catch (ActiveSubscriptionException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
         } catch (StripeException e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Failed to create checkout: " + e.getMessage()));

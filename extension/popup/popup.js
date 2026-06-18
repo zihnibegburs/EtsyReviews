@@ -479,17 +479,31 @@ async function loadPurchasePageData() {
 
     try {
         const subscription = await API.getSubscription();
-        if (subscription && subscription.status === 'ACTIVE') {
+        const hasActive = subscription && subscription.status === 'ACTIVE';
+
+        if (hasActive) {
             currentPlan.textContent = 'PRO';
             currentPlan.className = 'status-badge active';
+            buyMonthly.disabled = true;
+            buyYearly.disabled = true;
+            buyMonthly.textContent = 'Current Plan';
+            buyYearly.textContent = 'Current Plan';
         } else {
             currentPlan.textContent = 'FREE';
             currentPlan.className = 'status-badge inactive';
+            buyMonthly.disabled = false;
+            buyYearly.disabled = false;
+            buyMonthly.textContent = 'Get Monthly';
+            buyYearly.textContent = 'Get Yearly';
         }
     } catch (error) {
         console.error('❌ Failed to load purchase page data:', error);
         currentPlan.textContent = 'FREE';
         currentPlan.className = 'status-badge inactive';
+        buyMonthly.disabled = false;
+        buyYearly.disabled = false;
+        buyMonthly.textContent = 'Get Monthly';
+        buyYearly.textContent = 'Get Yearly';
     }
 }
 
@@ -498,9 +512,12 @@ buyMonthly.addEventListener('click', async () => {
         alert('Please login first');
         return;
     }
+    if (buyMonthly.disabled) {
+        alert('You already have an active PRO subscription.');
+        return;
+    }
 
     console.log('💳 Opening checkout page...');
-    // Open checkout page in new tab
     chrome.tabs.create({ url: chrome.runtime.getURL('checkout.html') });
 });
 
@@ -509,9 +526,12 @@ buyYearly.addEventListener('click', async () => {
         alert('Please login first');
         return;
     }
+    if (buyYearly.disabled) {
+        alert('You already have an active PRO subscription.');
+        return;
+    }
 
     console.log('💳 Opening checkout page...');
-    // Open checkout page in new tab
     chrome.tabs.create({ url: chrome.runtime.getURL('checkout.html') });
 });
 

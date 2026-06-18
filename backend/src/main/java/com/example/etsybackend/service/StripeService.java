@@ -1,5 +1,6 @@
 package com.example.etsybackend.service;
 
+import com.example.etsybackend.exception.ActiveSubscriptionException;
 import com.example.etsybackend.model.StripeEvent;
 import com.example.etsybackend.model.StripePayment;
 import com.example.etsybackend.model.Subscription;
@@ -66,9 +67,10 @@ public class StripeService {
     }
 
     public Session createCheckoutSession(Long userId, String email, String priceId) throws StripeException {
-        SessionCreateParams params = SessionCreateParams.builder()
+        ensureNoActiveSubscription(userId);
+
+        SessionCreateParams.Builder paramsBuilder = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.SUBSCRIPTION)
-                .setCustomerEmail(email)
                 .setClientReferenceId(userId.toString())
                 .putMetadata("user_id", userId.toString())
                 .addLineItem(
@@ -78,10 +80,26 @@ public class StripeService {
                                 .build()
                 )
                 .setSuccessUrl(successUrl)
-                .setCancelUrl(cancelUrl)
-                .build();
+                .setCancelUrl(cancelUrl);
 
-        return Session.create(params);
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null && user.getStripeCustomerId() != null) {
+            paramsBuilder.setCustomer(user.getStripeCustomerId());
+        } else {
+            paramsBuilder.setCustomerEmail(email);
+        }
+
+        return Session.create(paramsBuilder.build());
+    }
+
+    private void ensureNoActiveSubscription(Long userId) {
+        subscriptionRepository.findByUserId(userId).ifPresent(subscription -> {
+            if (subscription.getStatus() == SubscriptionStatus.ACTIVE
+                    || subscription.getStatus() == SubscriptionStatus.TRIAL
+                    || subscription.getStatus() == SubscriptionStatus.PAST_DUE) {
+                throw new ActiveSubscriptionException("You already have an active subscription");
+            }
+        });
     }
 
     @Transactional
