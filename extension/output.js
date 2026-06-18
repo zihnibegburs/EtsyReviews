@@ -293,11 +293,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     showSubscriptionBanner();
-    updateLoading('Opening Etsy reviews page...');
+    updateLoading('Connecting to Etsy listing tab...');
 
-    await ensureReviewsTab(tabId, (await chrome.tabs.get(tabId)).url || '');
     await ensureContentScript(tabId);
-    updateLoading('Fetching reviews...');
 
     const delayConfig = await new Promise((resolve) => {
         chrome.storage.local.get(['fetchDelayMin', 'fetchDelayMax'], (result) => {

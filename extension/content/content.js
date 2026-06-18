@@ -199,10 +199,75 @@ function extractReviewHtml(payload, activeTab = 'listing_reviews') {
     return '';
 }
 
+function parseDeepDiveReviewNode(node) {
+    const reviewId = node.getAttribute('data-review-region') || null;
+    const ratingLabel = node.querySelector('[role="img"][aria-label*="Rating"]')?.getAttribute('aria-label') || '';
+    const ratingMatch = ratingLabel.match(/Rating:\s*(\d)/i) || ratingLabel.match(/(\d)\s*out of/i);
+    const rating = ratingMatch ? parseInt(ratingMatch[1], 10) : 0;
+
+    const reviewer = node.querySelector('a[href*="/people/"]')?.textContent?.trim() ||
+        node.querySelector('a.wt-text-link-no-underline')?.textContent?.trim() ||
+        'Anonymous';
+
+    const dateRaw = node.querySelector('span.wt-text-body-small--tight, .wt-text-body-small')?.textContent?.trim() || '';
+
+    const itemLinkEl = node.querySelector('a[href*="/listing/"]');
+    const item = itemLinkEl?.textContent?.trim() || '';
+    const itemUrl = itemLinkEl?.getAttribute('href') || '';
+    const itemListingId = itemUrl.match(/\/listing\/(\d+)/)?.[1];
+
+    const textCandidates = Array.from(node.querySelectorAll('.wt-text-body'))
+        .map((el) => el.textContent?.trim())
+        .filter(Boolean);
+    const text = textCandidates.find((value) => value !== item && !/^Purchased item:/i.test(value)) || textCandidates[0] || '';
+
+    if (!text && rating === 0) {
+        return null;
+    }
+
+    return {
+        reviewId,
+        reviewer,
+        rating,
+        text,
+        item,
+        itemUrl,
+        listingId: itemListingId ? parseInt(itemListingId, 10) : null,
+        date: formatReviewDate(dateRaw)
+    };
+}
+
+function parseDeepDiveReviewsFromRoot(root) {
+    if (!root) return [];
+
+    const container = root.querySelector?.('[data-deep-dive-reviews-container="true"]') || root;
+    const reviewNodes = container.querySelectorAll?.('[data-review-region]') || [];
+    const seen = new Set();
+
+    return Array.from(reviewNodes).map((node) => {
+        const review = parseDeepDiveReviewNode(node);
+        if (!review) return null;
+
+        const key = review.reviewId || `${review.reviewer}|${review.text}|${review.date}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return review;
+    }).filter(Boolean);
+}
+
+function parseDeepDiveReviewsFromDocument() {
+    return parseDeepDiveReviewsFromRoot(document);
+}
+
 function parseReviewsFromHtml(htmlString) {
     if (!htmlString?.trim()) return [];
 
     const doc = new DOMParser().parseFromString(htmlString, 'text/html');
+    const deepDiveReviews = parseDeepDiveReviewsFromRoot(doc);
+    if (deepDiveReviews.length > 0) {
+        return deepDiveReviews;
+    }
+
     let reviewNodes = doc.querySelectorAll('.review-card');
 
     if (reviewNodes.length === 0) {
@@ -228,7 +293,7 @@ function parseReviewsFromHtml(htmlString) {
             '.wt-text-body, [data-review-text], .prose, p[data-review-text], .wt-break-word'
         )?.textContent?.trim() || '';
 
-        const itemLinkEl = node.querySelector('a[data-review-link], [data-review-listing], .wt-text-truncate a');
+        const itemLinkEl = node.querySelector('a[data-review-link], [data-review-listing], .wt-text-truncate a, a[href*="/listing/"]');
         const item = itemLinkEl?.textContent?.trim() || '';
         const itemUrl = itemLinkEl?.getAttribute('href') || '';
         const itemListingId = itemUrl.match(/\/listing\/(\d+)/)?.[1];
@@ -253,22 +318,73 @@ function parseReviewsFromHtml(htmlString) {
 }
 
 function parseReviewsFromDocument() {
+    const deepDiveReviews = parseDeepDiveReviewsFromDocument();
+    if (deepDiveReviews.length > 0) {
+        return deepDiveReviews;
+    }
     return parseReviewsFromHtml(document.documentElement.outerHTML);
 }
 
-function findViewAllReviewsElement() {
-    for (const span of document.querySelectorAll('span.wt-pl-xs-2.wt-pr-xs-2, span')) {
-        if (/view all reviews for this item/i.test(span.textContent.trim())) {
-            return span.closest('a, button') || span;
+function findShowAllReviewsButton() {
+    for (const button of document.querySelectorAll('button[data-clg-id="WtButton"]')) {
+        if (/^show all$/i.test(button.textContent.trim())) {
+            return button;
         }
     }
 
-    const listingId = extractListingId();
-    if (listingId) {
-        return document.querySelector(`a[href*="/listing/${listingId}/reviews"]`);
+    return Array.from(document.querySelectorAll('button.wt-btn--secondary.wt-btn--small'))
+        .find((button) => /show all/i.test(button.textContent.trim())) || null;
+}
+
+function findNextDeepDivePageButton() {
+    for (const button of document.querySelectorAll('button.wt-action-group__item')) {
+        const label = button.querySelector('.wt-screen-reader-only')?.textContent?.trim();
+        if (label === 'Next' && button.getAttribute('aria-disabled') !== 'true' && !button.disabled) {
+            return button;
+        }
     }
 
-    return document.querySelector('a[href*="/reviews"]');
+    return null;
+}
+
+async function waitForDeepDiveReviewsContainer(maxWaitMs = 15000) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < maxWaitMs) {
+        const container = document.querySelector('[data-deep-dive-reviews-container="true"]');
+        if (container?.querySelector('[data-review-region]')) {
+            return container;
+        }
+        await sleep(300);
+    }
+
+    return null;
+}
+
+async function openDeepDiveReviewsPanel() {
+    await ensureReviewsSectionVisible();
+
+    const existingContainer = document.querySelector('[data-deep-dive-reviews-container="true"]');
+    if (existingContainer?.querySelector('[data-review-region]')) {
+        console.log('📍 Deep dive reviews panel already open');
+        return existingContainer;
+    }
+
+    const showAllButton = findShowAllReviewsButton();
+    if (!showAllButton) {
+        throw new Error('Could not find the "Show all" reviews button. Scroll to Reviews and try again.');
+    }
+
+    console.log('🖱️ Clicking "Show all" reviews button');
+    showAllButton.scrollIntoView({ behavior: 'auto', block: 'center' });
+    showAllButton.click();
+
+    const container = await waitForDeepDiveReviewsContainer();
+    if (!container) {
+        throw new Error('Reviews panel did not open after clicking "Show all".');
+    }
+
+    return container;
 }
 
 function getListingReviewsUrl(data, page) {
@@ -334,7 +450,7 @@ async function ensureReviewsSectionVisible() {
     }
 
     const reviewsAnchor = document.getElementById('reviews') ||
-        document.querySelector('[data-reviews-region], [data-region="reviews"]');
+        document.querySelector('[data-region="reviews"], [data-reviews-region]');
     reviewsAnchor?.scrollIntoView({ behavior: 'auto', block: 'start' });
     await sleep(500);
 }
@@ -502,11 +618,96 @@ function extractHasMoreReviews(payload, reviewCount) {
 }
 
 function isDuplicateReview(review, existingReviews) {
+    if (review.reviewId) {
+        return existingReviews.some((existing) => existing.reviewId === review.reviewId);
+    }
+
     return existingReviews.some((existing) =>
         existing.reviewer === review.reviewer &&
         existing.text === review.text &&
         existing.date === review.date
     );
+}
+
+async function waitForNewDeepDiveReviews(previousIds, maxWaitMs = 10000) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < maxWaitMs) {
+        const currentReviews = parseDeepDiveReviewsFromDocument();
+        const hasNewReview = currentReviews.some((review) => review.reviewId && !previousIds.has(review.reviewId));
+        if (hasNewReview) {
+            return true;
+        }
+        await sleep(300);
+    }
+
+    return false;
+}
+
+function collectReviewIds(reviews) {
+    return new Set(reviews.map((review) => review.reviewId).filter(Boolean));
+}
+
+async function fetchReviewsViaDeepDivePanel(data, { isProUser, freeLimit, delayMin, delayMax, onProgress }) {
+    await openDeepDiveReviewsPanel();
+
+    const allReviews = [];
+    let page = 1;
+    let stagnantRounds = 0;
+
+    while (stagnantRounds < 2 && page <= 500) {
+        const pageReviews = parseDeepDiveReviewsFromDocument();
+        let addedCount = 0;
+
+        for (const review of pageReviews) {
+            if (!isProUser && allReviews.length >= freeLimit) {
+                break;
+            }
+
+            if (!isDuplicateReview(review, allReviews)) {
+                allReviews.push(review);
+                addedCount += 1;
+            }
+        }
+
+        console.log(`✅ Deep dive page ${page}: ${pageReviews.length} visible, ${addedCount} new (total ${allReviews.length})`);
+
+        if (onProgress) {
+            onProgress(allReviews, page);
+        }
+
+        if (!isProUser && allReviews.length >= freeLimit) {
+            break;
+        }
+
+        const nextButton = findNextDeepDivePageButton();
+        if (!nextButton) {
+            console.log('⏹️ No Next button — reached last review page');
+            break;
+        }
+
+        if (addedCount === 0) {
+            stagnantRounds += 1;
+        } else {
+            stagnantRounds = 0;
+        }
+
+        const previousIds = collectReviewIds(allReviews);
+        nextButton.scrollIntoView({ behavior: 'auto', block: 'center' });
+        nextButton.click();
+
+        const loaded = await waitForNewDeepDiveReviews(previousIds);
+        if (!loaded && stagnantRounds >= 1) {
+            console.log('⏹️ Next page did not load new reviews');
+            break;
+        }
+
+        page += 1;
+        const randomDelay = (delayMin + Math.random() * (delayMax - delayMin)) * 1000;
+        await sleep(randomDelay);
+    }
+
+    return allReviews;
 }
 
 async function fetchReviewPage(data, page, preferredTab) {
@@ -645,98 +846,95 @@ async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMi
         throw new Error('Missing listing or shop ID on this page');
     }
 
-    if (!data.csrfToken) {
-        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
-    }
-
     publishEtsyData();
-    await activateListingReviewsContext(data);
 
-    const allReviews = [];
-    let page = 1;
-    let hasMore = true;
-    let preferredTab = null;
-    let duplicatePages = 0;
-
-    while (hasMore) {
-        const result = await fetchReviewPage(data, page, preferredTab);
-        const pageReviews = result.reviews;
-
-        if (pageReviews.length === 0) {
-            break;
-        }
-
-        if (result.activeTab) {
-            preferredTab = result.activeTab;
-        }
-
-        let addedCount = 0;
-        for (const review of pageReviews) {
-            if (!isProUser && allReviews.length >= freeLimit) {
-                hasMore = false;
-                break;
-            }
-
-            if (!isDuplicateReview(review, allReviews)) {
-                allReviews.push(review);
-                addedCount += 1;
-            }
-        }
-
+    const sendProgress = (reviews, page) => {
         chrome.runtime.sendMessage({
             type: 'reviewProgress',
             listingId: data.listingId,
             shopId: data.shopId,
             page,
-            total: allReviews.length,
-            reviews: allReviews,
-            limitReached: !isProUser && allReviews.length >= freeLimit
+            total: reviews.length,
+            reviews,
+            limitReached: !isProUser && reviews.length >= freeLimit
         });
+    };
 
-        if (!hasMore || (!isProUser && allReviews.length >= freeLimit)) {
-            break;
-        }
+    let allReviews = [];
 
-        if (addedCount === 0) {
-            duplicatePages += 1;
-            if (duplicatePages >= 2) {
-                console.log(`⏹️ Same reviews repeated on page ${page}, trying DOM pagination`);
-                break;
-            }
-        } else {
-            duplicatePages = 0;
-        }
-
-        if (result.hasMore === false) {
-            console.log(`⏹️ Etsy reported no more review pages after page ${page}`);
-            break;
-        }
-
-        page += 1;
-        const randomDelay = (delayMin + Math.random() * (delayMax - delayMin)) * 1000;
-        await sleep(randomDelay);
-    }
-
-    if (window.location.pathname.includes('/reviews')) {
-        await fetchReviewsViaDomPagination(data, allReviews, {
+    try {
+        allReviews = await fetchReviewsViaDeepDivePanel(data, {
             isProUser,
             freeLimit,
-            onProgress: (total, round) => {
-                chrome.runtime.sendMessage({
-                    type: 'reviewProgress',
-                    listingId: data.listingId,
-                    shopId: data.shopId,
-                    page: round,
-                    total,
-                    reviews: allReviews,
-                    limitReached: !isProUser && total >= freeLimit
-                });
-            }
+            delayMin,
+            delayMax,
+            onProgress: sendProgress
         });
+    } catch (deepDiveError) {
+        console.warn('Deep dive review fetch failed, trying API fallback:', deepDiveError.message);
+
+        if (!data.csrfToken) {
+            throw deepDiveError;
+        }
+
+        let page = 1;
+        let preferredTab = null;
+        let duplicatePages = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+            const result = await fetchReviewPage(data, page, preferredTab);
+            const pageReviews = result.reviews;
+
+            if (pageReviews.length === 0) {
+                break;
+            }
+
+            if (result.activeTab) {
+                preferredTab = result.activeTab;
+            }
+
+            let addedCount = 0;
+            for (const review of pageReviews) {
+                if (!isProUser && allReviews.length >= freeLimit) {
+                    hasMore = false;
+                    break;
+                }
+
+                if (!isDuplicateReview(review, allReviews)) {
+                    allReviews.push(review);
+                    addedCount += 1;
+                }
+            }
+
+            sendProgress(allReviews, page);
+
+            if (!hasMore || (!isProUser && allReviews.length >= freeLimit)) {
+                break;
+            }
+
+            if (addedCount === 0) {
+                duplicatePages += 1;
+                if (duplicatePages >= 2) break;
+            } else {
+                duplicatePages = 0;
+            }
+
+            if (result.hasMore === false) {
+                break;
+            }
+
+            page += 1;
+            await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
+        }
+
+        if (allReviews.length === 0) {
+            throw deepDiveError;
+        }
     }
 
     if (allReviews.length === 0) {
-        throw new Error('No reviews found. Scroll to Reviews on the listing page and try again.');
+        throw new Error('No reviews found. Open the listing Reviews section and try again.');
     }
 
     return {
