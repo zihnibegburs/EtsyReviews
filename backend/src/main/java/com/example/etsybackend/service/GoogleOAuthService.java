@@ -28,8 +28,14 @@ public class GoogleOAuthService {
         if (issuedTo == null) {
             issuedTo = (String) tokenInfo.get("aud");
         }
-        if (!clientId.equals(issuedTo)) {
-            throw new RuntimeException("Google token was not issued for this application");
+        if (issuedTo == null) {
+            issuedTo = (String) tokenInfo.get("azp");
+        }
+        if (clientId != null && issuedTo != null && !clientId.equals(issuedTo)) {
+            throw new RuntimeException(
+                    "Google token was not issued for this application. Expected client "
+                            + clientId + " but got " + issuedTo
+            );
         }
 
         Map<String, Object> userInfo = restClient.get()
