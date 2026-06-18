@@ -28,7 +28,6 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       JWT_SECRET: your-secret-key-change-this-in-production-minimum-32-characters-required
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       PADDLE_VENDOR_ID: ${PADDLE_VENDOR_ID}
       PADDLE_API_KEY: ${PADDLE_API_KEY}
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET}

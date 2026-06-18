@@ -17,10 +17,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://localhost:8081/*",
-    "https://*.onrender.com/*",
+    "https://etsy-backend-u3x2.onrender.com/*",
     "https://www.googleapis.com/*",
-    "https://api.laodikeia.co/*",
     "https://checkout.stripe.com/*",
     "*://www.etsy.com/*"
   ],

@@ -54,8 +54,8 @@ public class AuthService {
         return new AuthResponse(token, userDTO);
     }
 
-    public AuthResponse authenticateGoogleCode(String code, String redirectUri) {
-        Map<String, Object> userInfo = googleOAuthService.fetchUserInfo(code, redirectUri);
+    public AuthResponse authenticateGoogleAccessToken(String accessToken) {
+        Map<String, Object> userInfo = googleOAuthService.fetchUserInfo(accessToken);
         return authenticateGoogleUser(
                 (String) userInfo.get("id"),
                 (String) userInfo.get("email"),

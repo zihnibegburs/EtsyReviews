@@ -20,28 +20,24 @@ public class AuthController {
     }
 
     @PostMapping("/google")
-    @Operation(summary = "Authenticate with Google", description = "Authenticate user with Google OAuth credentials and return JWT token")
+    @Operation(summary = "Authenticate with Google", description = "Verify Google access token from Chrome extension and return JWT token")
     public ResponseEntity<AuthResponse> googleAuth(@RequestBody Map<String, String> request) {
+        String accessToken = request.get("accessToken");
+        if (accessToken != null && !accessToken.isBlank()) {
+            AuthResponse response = authService.authenticateGoogleAccessToken(accessToken);
+            return ResponseEntity.ok(response);
+        }
+
         String googleId = request.get("googleId");
         String email = request.get("email");
         String name = request.get("name");
         String pictureUrl = request.get("pictureUrl");
 
-        AuthResponse response = authService.authenticateGoogleUser(googleId, email, name, pictureUrl);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/google/code")
-    @Operation(summary = "Authenticate with Google authorization code", description = "Exchange Google OAuth code from Chrome extension and return JWT token")
-    public ResponseEntity<AuthResponse> googleAuthCode(@RequestBody Map<String, String> request) {
-        String code = request.get("code");
-        String redirectUri = request.get("redirectUri");
-
-        if (code == null || code.isBlank() || redirectUri == null || redirectUri.isBlank()) {
+        if (googleId == null || googleId.isBlank() || email == null || email.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
 
-        AuthResponse response = authService.authenticateGoogleCode(code, redirectUri);
+        AuthResponse response = authService.authenticateGoogleUser(googleId, email, name, pictureUrl);
         return ResponseEntity.ok(response);
     }
 

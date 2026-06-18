@@ -20,32 +20,15 @@ const API = {
         return headers;
     },
 
-    async loginWithGoogleCode(code, redirectUri) {
-        try {
-            const response = await fetch(`${this.BASE_URL}/auth/google/code`, {
-                method: 'POST',
-                headers: await this.getHeaders(false),
-                body: JSON.stringify({ code, redirectUri })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Login error:', error);
-            throw error;
-        }
-    },
-
-    // Auth endpoints - Updated to match backend format
-    async loginWithGoogle(googleUserInfo) {
+    async loginWithGoogle(accessToken, googleUserInfo) {
         try {
             const response = await fetch(`${this.BASE_URL}/auth/google`, {
                 method: 'POST',
+                mode: 'cors',
+                credentials: 'omit',
                 headers: await this.getHeaders(false),
                 body: JSON.stringify({
+                    accessToken,
                     googleId: googleUserInfo.id,
                     email: googleUserInfo.email,
                     name: googleUserInfo.name,
@@ -54,7 +37,16 @@ const API = {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                let detail = `HTTP error! status: ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body.error) {
+                        detail = body.error;
+                    }
+                } catch {
+                    // ignore non-JSON error bodies
+                }
+                throw new Error(detail);
             }
 
             return await response.json();

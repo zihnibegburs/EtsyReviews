@@ -1,10 +1,7 @@
 package com.example.etsybackend.service;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
@@ -13,33 +10,27 @@ import java.util.Map;
 public class GoogleOAuthService {
     private final RestClient restClient = RestClient.create();
 
-    @Value("${spring.security.oauth2.client.registration.google.client-id}")
+    @Value("${google.oauth2.client-id}")
     private String clientId;
 
-    @Value("${spring.security.oauth2.client.registration.google.client-secret}")
-    private String clientSecret;
-
     @SuppressWarnings("unchecked")
-    public Map<String, Object> fetchUserInfo(String code, String redirectUri) {
-        MultiValueMap<String, String> tokenRequest = new LinkedMultiValueMap<>();
-        tokenRequest.add("code", code);
-        tokenRequest.add("client_id", clientId);
-        tokenRequest.add("client_secret", clientSecret);
-        tokenRequest.add("redirect_uri", redirectUri);
-        tokenRequest.add("grant_type", "authorization_code");
-
-        Map<String, Object> tokenResponse = restClient.post()
-                .uri("https://oauth2.googleapis.com/token")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(tokenRequest)
+    public Map<String, Object> fetchUserInfo(String accessToken) {
+        Map<String, Object> tokenInfo = restClient.get()
+                .uri("https://oauth2.googleapis.com/tokeninfo?access_token={token}", accessToken)
                 .retrieve()
                 .body(Map.class);
 
-        if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
-            throw new RuntimeException("Failed to exchange Google authorization code");
+        if (tokenInfo == null || tokenInfo.containsKey("error")) {
+            throw new RuntimeException("Invalid Google access token");
         }
 
-        String accessToken = (String) tokenResponse.get("access_token");
+        String issuedTo = (String) tokenInfo.get("issued_to");
+        if (issuedTo == null) {
+            issuedTo = (String) tokenInfo.get("aud");
+        }
+        if (!clientId.equals(issuedTo)) {
+            throw new RuntimeException("Google token was not issued for this application");
+        }
 
         Map<String, Object> userInfo = restClient.get()
                 .uri("https://www.googleapis.com/oauth2/v2/userinfo")

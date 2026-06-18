@@ -6,7 +6,7 @@ Etsy listing sayfalarından yorum toplama, CSV export ve PRO abonelik yönetimi.
 
 1. `chrome://extensions` → Geliştirici modu
 2. **Paketlenmemiş öğe yükle** → bu klasörü seçin
-3. API'nin çalıştığından emin olun (`../../backend/` veya production URL)
+3. API production'da çalışıyor olmalı: `https://etsy-backend-u3x2.onrender.com`
 
 ## Google OAuth — Chrome Extension client (zorunlu)
 

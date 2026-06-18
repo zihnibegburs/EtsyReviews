@@ -11,11 +11,8 @@ spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 
-# Google OAuth2
-spring.security.oauth2.client.registration.google.client-id=your-google-client-id
-spring.security.oauth2.client.registration.google.client-secret=your-google-client-secret
-spring.security.oauth2.client.registration.google.scope=profile,email
-spring.security.oauth2.client.registration.google.redirect-uri={baseUrl}/api/auth/callback/google
+# Google OAuth2 — Chrome Extension client ID
+google.oauth2.client-id=your-chrome-extension-client-id
 
 # JWT (min 32 characters)
 jwt.secret=change-me-to-a-long-random-secret-at-least-32-chars
@@ -30,8 +27,7 @@ stripe.price-id-yearly=price_your_yearly_id
 stripe.success-url=http://localhost:8081/checkout/success?session_id={CHECKOUT_SESSION_ID}
 stripe.cancel-url=http://localhost:8081/checkout/cancel
 
-# CORS (add your Chrome extension origin)
-cors.allowed-origins=chrome-extension://your-extension-id,http://localhost:3000
+# CORS — SecurityConfig içinde chrome-extension://* tanımlı
 
 # Swagger
 springdoc.api-docs.path=/api-docs

@@ -225,8 +225,8 @@ async function handleLogin() {
         const googleUserInfo = await userInfoResponse.json();
         console.log('✅ Google user info received:', googleUserInfo.email);
 
-        console.log('📡 Sending to backend...');
-        const response = await API.loginWithGoogle(googleUserInfo);
+        console.log('📡 Verifying with backend...');
+        const response = await API.loginWithGoogle(token, googleUserInfo);
         console.log('✅ Backend response received');
 
         if (response && response.token) {

@@ -103,6 +103,7 @@ npm run dev -- -p 3001
 
 ## Dokümantasyon
 
+- `docs/GOOGLE_OAUTH.md` — Google OAuth production kurulumu
 - `docs/STRIPE_SETUP.md` — Stripe abonelik kurulumu
 
 ## Kaynak Projeler
