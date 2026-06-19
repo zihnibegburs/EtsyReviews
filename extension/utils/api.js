@@ -126,7 +126,16 @@ const API = {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                let detail = `HTTP error! status: ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body.error) {
+                        detail = body.error;
+                    }
+                } catch {
+                    // ignore non-JSON error bodies
+                }
+                throw new Error(detail);
             }
 
             return await response.json();

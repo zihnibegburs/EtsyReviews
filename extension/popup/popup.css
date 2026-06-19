@@ -115,6 +115,18 @@ body {
     border-color: #D1D5DB;
 }
 
+.btn-danger {
+    background: #FEF2F2;
+    color: #B91C1C;
+    border: 1px solid #FECACA;
+    width: 100%;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #FEE2E2;
+    border-color: #FCA5A5;
+}
+
 .btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
@@ -706,4 +718,8 @@ body {
     width: auto;
     padding: 6px 14px;
     font-size: 12px;
+}
+
+.subscription-cancel-note {
+    margin-top: 8px;
 }

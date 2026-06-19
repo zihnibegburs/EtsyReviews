@@ -4,6 +4,8 @@ import com.example.etsybackend.dto.SubscriptionDTO;
 import com.example.etsybackend.model.Subscription;
 import com.example.etsybackend.repository.SubscriptionRepository;
 import com.example.etsybackend.repository.UserRepository;
+import com.example.etsybackend.service.StripeService;
+import com.stripe.exception.StripeException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,10 +22,16 @@ import java.util.Map;
 public class SubscriptionController {
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
+    private final StripeService stripeService;
 
-    public SubscriptionController(SubscriptionRepository subscriptionRepository, UserRepository userRepository) {
+    public SubscriptionController(
+            SubscriptionRepository subscriptionRepository,
+            UserRepository userRepository,
+            StripeService stripeService
+    ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
+        this.stripeService = stripeService;
     }
 
     @GetMapping("/me")
@@ -40,12 +48,24 @@ public class SubscriptionController {
             return ResponseEntity.notFound().build();
         }
 
-        SubscriptionDTO dto = new SubscriptionDTO();
-        dto.setPlanId(subscription.getPlanId());
-        dto.setStatus(subscription.getStatus());
-        dto.setCurrentPeriodEnd(subscription.getCurrentPeriodEnd());
+        return ResponseEntity.ok(toDto(subscription));
+    }
 
-        return ResponseEntity.ok(dto);
+    @PostMapping("/cancel")
+    @Operation(summary = "Cancel Stripe subscription", description = "Cancels at end of current billing period")
+    public ResponseEntity<?> cancelSubscription(Authentication authentication) {
+        String email = authentication.getName();
+        Long userId = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"))
+                .getId();
+
+        try {
+            Subscription subscription = stripeService.cancelSubscription(userId);
+            return ResponseEntity.ok(toDto(subscription));
+        } catch (StripeException e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to cancel subscription: " + e.getMessage()));
+        }
     }
 
     @GetMapping("/status")
@@ -65,6 +85,15 @@ public class SubscriptionController {
             "hasActiveSubscription", hasActiveSubscription,
             "status", subscription != null ? subscription.getStatus() : "NONE"
         ));
+    }
+
+    private SubscriptionDTO toDto(Subscription subscription) {
+        SubscriptionDTO dto = new SubscriptionDTO();
+        dto.setPlanId(subscription.getPlanId());
+        dto.setStatus(subscription.getStatus());
+        dto.setCurrentPeriodEnd(subscription.getCurrentPeriodEnd());
+        dto.setCancelledAt(subscription.getCancelledAt());
+        return dto;
     }
 }
 

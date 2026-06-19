@@ -28,12 +28,12 @@ const VALID_SORT_OPTIONS = new Set(['Recency', 'Relevancy', 'Highest', 'Lowest']
 function getUrlParams() {
     const params = new URLSearchParams(window.location.search);
     const tabId = parseInt(params.get('tabId'), 10);
-    const reviewScope = params.get('reviewScope') || 'listingReviews';
+    const reviewScope = params.get('reviewScope') || 'shopReviews';
     const sortOption = params.get('sortOption') || 'Relevancy';
 
     return {
         tabId: Number.isNaN(tabId) ? null : tabId,
-        reviewScope: VALID_REVIEW_SCOPES.has(reviewScope) ? reviewScope : 'listingReviews',
+        reviewScope: VALID_REVIEW_SCOPES.has(reviewScope) ? reviewScope : 'shopReviews',
         sortOption: VALID_SORT_OPTIONS.has(sortOption) ? sortOption : 'Relevancy'
     };
 }

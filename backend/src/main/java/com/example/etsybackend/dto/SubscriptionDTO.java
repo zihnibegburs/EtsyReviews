@@ -10,5 +10,6 @@ public class SubscriptionDTO {
     private String planId;
     private SubscriptionStatus status;
     private LocalDateTime currentPeriodEnd;
+    private LocalDateTime cancelledAt;
 }
 

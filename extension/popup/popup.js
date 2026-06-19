@@ -36,6 +36,11 @@ const maxDelayInput = document.getElementById('maxDelay');
 const saveDelayBtn = document.getElementById('saveDelayBtn');
 const currentDelayRange = document.getElementById('currentDelayRange');
 
+// Subscription settings
+const settingsSubscriptionStatus = document.getElementById('settingsSubscriptionStatus');
+const settingsSubscriptionRenewal = document.getElementById('settingsSubscriptionRenewal');
+const cancelSubscriptionBtn = document.getElementById('cancelSubscriptionBtn');
+
 // State
 let etsyData = null;
 let isAuthenticated = false;
@@ -279,6 +284,79 @@ logoutBtn.addEventListener('click', async () => {
 });
 
 // =============== ETSY DATA HANDLING ===============
+function isEtsyListingUrl(url) {
+    return !!url && /etsy\.com\/listing\//i.test(url);
+}
+
+async function ensureContentScript(tabId) {
+    try {
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content/content.js']
+        });
+        return true;
+    } catch (error) {
+        console.warn('⚠️ Could not inject content script:', error.message);
+        return false;
+    }
+}
+
+async function collectEtsyDataFromTab(tabId, maxRetries = 12, intervalMs = 400) {
+    let injected = false;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            const data = await chrome.tabs.sendMessage(tabId, { action: 'collectEtsyData' });
+            if (data?.listingId && data?.shopId) {
+                return data;
+            }
+            if (data?.listingId) {
+                console.log(`Attempt ${attempt + 1}: listing found, waiting for shop ID...`);
+            }
+        } catch (error) {
+            if (!injected) {
+                injected = await ensureContentScript(tabId);
+                if (injected) {
+                    await new Promise((resolve) => setTimeout(resolve, 300));
+                    continue;
+                }
+            }
+            console.log(`Attempt ${attempt + 1}: content script unavailable`, error.message);
+        }
+
+        if (attempt < maxRetries - 1) {
+            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        }
+    }
+
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'getEtsyData' }, (cached) => {
+            if (chrome.runtime.lastError) {
+                resolve(null);
+                return;
+            }
+            resolve(cached?.listingId && cached?.shopId ? cached : null);
+        });
+    });
+}
+
+function applyEtsyData(data) {
+    if (!data?.listingId || !data?.shopId) {
+        console.warn('⚠️ Incomplete Etsy data');
+        etsyData = null;
+        etsyDataCard.classList.add('hidden');
+        fetchReviews.disabled = true;
+        setStatusText('Missing listing or shop ID — try refreshing the page', 'warning');
+        return;
+    }
+
+    console.log('✅ Etsy data present');
+    etsyData = data;
+    updateEtsyDataDisplay(data);
+    fetchReviews.disabled = false;
+    setStatusText('Listing detected — ready to fetch', 'success');
+}
+
 async function requestEtsyData() {
     if (!isAuthenticated) {
         console.warn('⚠️ Not authenticated, skipping Etsy data request');
@@ -287,52 +365,11 @@ async function requestEtsyData() {
 
     console.log('🔍 Requesting Etsy data...');
 
-    let isOnListingPage = false;
-
     try {
-        // Check if current tab is an Etsy listing page
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-        if (tab && tab.url && tab.url.includes('etsy.com/listing/')) {
-            isOnListingPage = true;
-            console.log('✅ Active tab is an Etsy listing page');
-            console.log('🔄 Requesting fresh Etsy data from content script...');
-
-            try {
-                await chrome.tabs.sendMessage(tab.id, { action: 'collectEtsyData' });
-            } catch (error) {
-                console.log('⚠️ Could not request fresh Etsy data yet:', error.message);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 1500));
-        } else {
+        if (!tab?.url || !isEtsyListingUrl(tab.url)) {
             console.log('⚠️ Active tab is not an Etsy listing page');
-        }
-    } catch (error) {
-        console.error('❌ Error checking active tab:', error);
-    }
-
-    // If not on listing page, show "Navigate to Etsy listing" message
-    if (!isOnListingPage) {
-        console.log('❌ Not on listing page, showing navigation message');
-        etsyData = null;
-        etsyDataCard.classList.add('hidden');
-        fetchReviews.disabled = true;
-        setStatusText('Navigate to an Etsy listing page first', 'navigate');
-        return;
-    }
-
-    // Only request data if we're on a listing page
-    chrome.runtime.sendMessage({ type: "getEtsyData" }, (data) => {
-        console.log('📦 Received Etsy data:', data);
-
-        if (chrome.runtime.lastError) {
-            console.error('❌ Runtime error:', chrome.runtime.lastError);
-            return;
-        }
-
-        if (!data) {
-            console.warn('⚠️ No data received');
             etsyData = null;
             etsyDataCard.classList.add('hidden');
             fetchReviews.disabled = true;
@@ -340,21 +377,31 @@ async function requestEtsyData() {
             return;
         }
 
-        if (!data.listingId || !data.shopId) {
-            console.warn('⚠️ Incomplete data');
+        console.log('✅ Active tab is an Etsy listing page');
+        setStatusText('Detecting listing...', 'muted');
+        etsyDataCard.classList.add('hidden');
+        fetchReviews.disabled = true;
+
+        const data = await collectEtsyDataFromTab(tab.id);
+        console.log('📦 Received Etsy data:', data);
+
+        if (!data) {
+            console.warn('⚠️ No data received');
+            etsyData = null;
+            etsyDataCard.classList.add('hidden');
             fetchReviews.disabled = true;
-            setStatusText('Missing listing or shop ID — try refreshing the page', 'warning');
+            setStatusText('Could not read listing data — try refreshing the page', 'warning');
             return;
         }
 
-        // All data present
-        console.log('✅ Etsy data present');
-
-        etsyData = data;
-        updateEtsyDataDisplay(data);
-        fetchReviews.disabled = false;
-        setStatusText('Listing detected — ready to fetch', 'success');
-    });
+        applyEtsyData(data);
+    } catch (error) {
+        console.error('❌ Error checking active tab:', error);
+        etsyData = null;
+        etsyDataCard.classList.add('hidden');
+        fetchReviews.disabled = true;
+        setStatusText('Failed to detect listing — try again', 'warning');
+    }
 }
 
 function setStatusText(message, variant) {
@@ -388,7 +435,7 @@ refreshBtn.addEventListener('click', async () => {
         }
 
         // Check if it's an Etsy listing page
-        if (!tab.url || !tab.url.includes('etsy.com/listing/')) {
+        if (!isEtsyListingUrl(tab.url)) {
             console.warn('⚠️ Not on Etsy listing page');
             alert('Please navigate to an Etsy listing page first');
             return;
@@ -418,12 +465,12 @@ fetchReviews.addEventListener('click', async () => {
     }
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.url || !tab.url.includes('etsy.com/listing/')) {
+    if (!tab?.url || !isEtsyListingUrl(tab.url)) {
         alert('Please open an Etsy listing page first.\n\nExample:\nhttps://www.etsy.com/listing/1020427168/...');
         return;
     }
 
-    const reviewScope = document.querySelector('input[name="reviewScope"]:checked')?.value || 'listingReviews';
+    const reviewScope = document.querySelector('input[name="reviewScope"]:checked')?.value || 'shopReviews';
     const sortOption = document.getElementById('sortOption')?.value || 'Relevancy';
     const params = new URLSearchParams({
         tabId: String(tab.id),
@@ -545,19 +592,95 @@ buyYearly.addEventListener('click', async () => {
 });
 
 // =============== SETTINGS PAGE ===============
+function formatSubscriptionDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function updateSubscriptionSettingsUI(subscription) {
+    const hasActive = subscription?.status === 'ACTIVE'
+        || subscription?.status === 'TRIAL'
+        || subscription?.status === 'PAST_DUE';
+    const isPendingCancel = hasActive && !!subscription?.cancelledAt;
+    const renewsAt = formatSubscriptionDate(subscription?.currentPeriodEnd);
+
+    if (hasActive) {
+        settingsSubscriptionStatus.textContent = 'PRO';
+        settingsSubscriptionStatus.className = 'status-badge active';
+
+        if (isPendingCancel) {
+            settingsSubscriptionRenewal.textContent = renewsAt
+                ? `Cancels on ${renewsAt}`
+                : 'Cancellation scheduled';
+            cancelSubscriptionBtn.disabled = true;
+            cancelSubscriptionBtn.textContent = 'Cancellation scheduled';
+        } else {
+            settingsSubscriptionRenewal.textContent = renewsAt
+                ? `Renews on ${renewsAt}`
+                : 'Active subscription';
+            cancelSubscriptionBtn.disabled = false;
+            cancelSubscriptionBtn.textContent = 'Cancel subscription';
+        }
+    } else {
+        settingsSubscriptionStatus.textContent = 'FREE';
+        settingsSubscriptionStatus.className = 'status-badge inactive';
+        settingsSubscriptionRenewal.textContent = 'No active subscription';
+        cancelSubscriptionBtn.disabled = true;
+        cancelSubscriptionBtn.textContent = 'Cancel subscription';
+    }
+}
+
 async function loadSettingsPageData() {
     if (!isAuthenticated) return;
 
     try {
-        // Load delay configuration
         const delayConfig = await StorageManager.getDelayConfig();
         minDelayInput.value = delayConfig.min;
         maxDelayInput.value = delayConfig.max;
         currentDelayRange.textContent = `${delayConfig.min}–${delayConfig.max} sec`;
+
+        const subscription = await API.getSubscription();
+        updateSubscriptionSettingsUI(subscription);
     } catch (error) {
         console.error('❌ Failed to load settings page data:', error);
+        updateSubscriptionSettingsUI(null);
     }
 }
+
+cancelSubscriptionBtn.addEventListener('click', async () => {
+    if (!isAuthenticated) {
+        alert('Please login first');
+        return;
+    }
+
+    if (cancelSubscriptionBtn.disabled) {
+        return;
+    }
+
+    const confirmed = confirm(
+        'Cancel your PRO subscription?\n\nYou will keep PRO access until the end of the current billing period.'
+    );
+    if (!confirmed) {
+        return;
+    }
+
+    cancelSubscriptionBtn.disabled = true;
+    cancelSubscriptionBtn.textContent = 'Cancelling...';
+
+    try {
+        const subscription = await API.cancelSubscription();
+        updateSubscriptionSettingsUI(subscription);
+        loadSubscriptionData();
+        loadPurchasePageData();
+        alert('Subscription cancelled. PRO access continues until the end of your billing period.');
+    } catch (error) {
+        console.error('❌ Failed to cancel subscription:', error);
+        alert('Failed to cancel subscription: ' + error.message);
+        await loadSettingsPageData();
+    }
+});
 
 saveDelayBtn.addEventListener('click', async () => {
     const min = parseInt(minDelayInput.value);

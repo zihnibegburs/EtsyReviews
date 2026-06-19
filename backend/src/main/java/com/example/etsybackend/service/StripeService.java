@@ -17,6 +17,7 @@ import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.Invoice;
 import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
+import com.stripe.param.SubscriptionUpdateParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import com.stripe.param.checkout.SessionRetrieveParams;
 import jakarta.annotation.PostConstruct;
@@ -64,6 +65,46 @@ public class StripeService {
     @PostConstruct
     void init() {
         Stripe.apiKey = secretKey;
+    }
+
+    public Subscription cancelSubscription(Long userId) throws StripeException {
+        Subscription subscription = subscriptionRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("No subscription found"));
+
+        if (subscription.getStripeSubscriptionId() == null) {
+            throw new RuntimeException("No Stripe subscription found");
+        }
+
+        if (subscription.getStatus() != SubscriptionStatus.ACTIVE
+                && subscription.getStatus() != SubscriptionStatus.TRIAL
+                && subscription.getStatus() != SubscriptionStatus.PAST_DUE) {
+            throw new RuntimeException("No active subscription to cancel");
+        }
+
+        if (subscription.getCancelledAt() != null) {
+            throw new RuntimeException("Subscription is already scheduled for cancellation");
+        }
+
+        com.stripe.model.Subscription stripeSubscription = com.stripe.model.Subscription.retrieve(
+                subscription.getStripeSubscriptionId()
+        );
+
+        if (Boolean.TRUE.equals(stripeSubscription.getCancelAtPeriodEnd())) {
+            subscription.setCancelledAt(LocalDateTime.now());
+            subscriptionRepository.save(subscription);
+            return subscription;
+        }
+
+        SubscriptionUpdateParams params = SubscriptionUpdateParams.builder()
+                .setCancelAtPeriodEnd(true)
+                .build();
+
+        stripeSubscription = stripeSubscription.update(params);
+        applyStripeSubscription(subscription, stripeSubscription);
+        subscription.setCancelledAt(LocalDateTime.now());
+        subscriptionRepository.save(subscription);
+        log.info("Subscription scheduled for cancellation for user {}", userId);
+        return subscription;
     }
 
     public Session createCheckoutSession(Long userId, String email, String priceId) throws StripeException {

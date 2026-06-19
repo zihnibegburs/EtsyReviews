@@ -123,11 +123,11 @@
                                     <span class="option-label">Review scope</span>
                                     <div class="scope-options">
                                         <label class="scope-option">
-                                            <input type="radio" name="reviewScope" value="listingReviews" checked>
+                                            <input type="radio" name="reviewScope" value="listingReviews">
                                             <span>Item</span>
                                         </label>
                                         <label class="scope-option">
-                                            <input type="radio" name="reviewScope" value="shopReviews">
+                                            <input type="radio" name="reviewScope" value="shopReviews" checked>
                                             <span>Shop</span>
                                         </label>
                                     </div>
@@ -237,7 +237,7 @@
 
                             <div class="faq-item">
                                 <h3>Need help?</h3>
-                                <p>Email us at <a href="mailto:support@example.com">support@example.com</a></p>
+                                <p>Email us at <a href="mailto:help@laodikeia.co">help@laodikeia.co</a></p>
                             </div>
                         </div>
                     </div>
@@ -247,6 +247,33 @@
                         <div class="content-section">
                             <h2>Settings</h2>
                             <p class="page-desc">Fetch configuration</p>
+
+                            <div class="settings-section" id="subscriptionSettingsSection">
+                                <h3>Subscription</h3>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <div>
+                                            <strong>Plan</strong>
+                                            <p class="setting-desc">Manage your Stripe PRO subscription</p>
+                                        </div>
+                                        <span id="settingsSubscriptionStatus" class="status-badge inactive">FREE</span>
+                                    </div>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <strong>Billing</strong>
+                                        <span id="settingsSubscriptionRenewal" class="setting-value">No active subscription</span>
+                                    </div>
+                                </div>
+                                <div class="setting-item">
+                                    <button id="cancelSubscriptionBtn" class="btn btn-danger" disabled>
+                                        Cancel subscription
+                                    </button>
+                                    <p class="setting-desc subscription-cancel-note">
+                                        Cancellation takes effect at the end of the current billing period. You keep PRO access until then.
+                                    </p>
+                                </div>
+                            </div>
 
                             <div class="settings-section">
                                 <h3>Request Delay</h3>
