@@ -2,7 +2,15 @@
 
 const DEEP_DIVE_REVIEWS_API = 'https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/deep_dive_reviews';
 const REVIEWS_API = 'https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/reviews';
-const DEEP_DIVE_REVIEW_SCOPE = 'shopReviews';
+
+const REVIEW_SCOPES = {
+    listingReviews: 'listing_reviews',
+    shopReviews: 'shop_reviews'
+};
+
+function scopeToActiveTab(reviewScope) {
+    return REVIEW_SCOPES[reviewScope] || REVIEW_SCOPES.listingReviews;
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -292,7 +300,7 @@ function buildEtsyApiHeaders(data, listingId) {
     };
 }
 
-function buildDeepDiveReviewRequestBody(data, page) {
+function buildDeepDiveReviewRequestBody(data, page, { scope = 'listingReviews', sortOption = 'Relevancy' } = {}) {
     return {
         log_performance_metrics: true,
         specs: {
@@ -301,9 +309,9 @@ function buildDeepDiveReviewRequestBody(data, page) {
                 {
                     listing_id: Number(data.listingId),
                     shop_id: Number(data.shopId),
-                    scope: DEEP_DIVE_REVIEW_SCOPE,
+                    scope,
                     page,
-                    sort_option: 'Relevancy',
+                    sort_option: sortOption,
                     rating_filter: null,
                     tag_filters: [],
                     review_highlight_transaction_id: null,
@@ -317,7 +325,7 @@ function buildDeepDiveReviewRequestBody(data, page) {
     };
 }
 
-function buildReviewRequestBody(data, page, activeTab) {
+function buildReviewRequestBody(data, page, activeTab, sortOption = 'Relevancy') {
     return {
         log_performance_metrics: true,
         specs: {
@@ -334,7 +342,7 @@ function buildReviewRequestBody(data, page, activeTab) {
                     should_show_variations: false,
                     is_reviews_untabbed_cached: false,
                     was_landing_from_external_referrer: !!data.isExternalReferrer,
-                    sort_option: 'Relevancy'
+                    sort_option: sortOption
                 }
             ]
         },
@@ -494,13 +502,13 @@ function extractPaginationInfo(html, currentPage) {
     return { hasMore: null };
 }
 
-async function fetchDeepDiveReviewsViaApi(data, page) {
+async function fetchDeepDiveReviewsViaApi(data, page, { scope = 'listingReviews', sortOption = 'Relevancy' } = {}) {
     await refreshCsrfToken(data);
     if (!data.csrfToken) {
         throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
     }
 
-    const requestBody = buildDeepDiveReviewRequestBody(data, page);
+    const requestBody = buildDeepDiveReviewRequestBody(data, page, { scope, sortOption });
     const response = await fetch(DEEP_DIVE_REVIEWS_API, {
         method: 'POST',
         headers: buildEtsyApiHeaders(data, data.listingId),
@@ -528,7 +536,7 @@ async function fetchDeepDiveReviewsViaApi(data, page) {
     };
 }
 
-async function fetchReviewsViaApi(data, page, activeTab) {
+async function fetchReviewsViaApi(data, page, activeTab, sortOption = 'Relevancy') {
     await refreshCsrfToken(data);
     if (!data.csrfToken) {
         throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
@@ -538,7 +546,7 @@ async function fetchReviewsViaApi(data, page, activeTab) {
         method: 'POST',
         headers: buildEtsyApiHeaders(data, data.listingId),
         credentials: 'include',
-        body: JSON.stringify(buildReviewRequestBody(data, page, activeTab))
+        body: JSON.stringify(buildReviewRequestBody(data, page, activeTab, sortOption))
     });
 
     if (response.status === 429) {
@@ -593,39 +601,32 @@ async function fetchReviewsViaListingPage(data, page) {
     };
 }
 
-async function fetchReviewPage(data, page, preferredTab) {
-    const apiTabs = preferredTab ? [preferredTab] : ['shop_reviews', 'listing_reviews'];
+async function fetchReviewPage(data, page, { reviewScope = 'listingReviews', sortOption = 'Relevancy' } = {}) {
+    const activeTab = scopeToActiveTab(reviewScope);
+    const apiResult = await fetchReviewsViaApi(data, page, activeTab, sortOption);
+    const reviews = apiResult.reviews;
 
-    for (const activeTab of apiTabs) {
-        const apiResult = await fetchReviewsViaApi(data, page, activeTab);
-        let reviews = apiResult.reviews;
-
-        if (activeTab === 'shop_reviews') {
-            reviews = filterReviewsForListing(reviews, data.listingId);
-        }
-
-        if (reviews.length > 0) {
-            return {
-                reviews,
-                hasMore: apiResult.hasMore,
-                activeTab,
-                jsDataSummary: apiResult.jsDataSummary
-            };
-        }
+    if (reviews.length > 0) {
+        return {
+            reviews,
+            hasMore: apiResult.hasMore,
+            activeTab,
+            jsDataSummary: apiResult.jsDataSummary
+        };
     }
 
-    if (page === 1) {
+    if (page === 1 && reviewScope === 'listingReviews') {
         const htmlResult = await fetchReviewsViaListingPage(data, page);
         if (htmlResult.reviews.length > 0) {
             return {
                 reviews: htmlResult.reviews,
                 hasMore: htmlResult.hasMore,
-                activeTab: preferredTab
+                activeTab
             };
         }
     }
 
-    return { reviews: [], hasMore: false, activeTab: preferredTab };
+    return { reviews: [], hasMore: false, activeTab };
 }
 
 function addPageReviews(allReviews, pageReviews, { isProUser, freeLimit }) {
@@ -645,7 +646,7 @@ function addPageReviews(allReviews, pageReviews, { isProUser, freeLimit }) {
     return { addedCount, limitReached: !isProUser && allReviews.length >= freeLimit };
 }
 
-async function fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort }) {
+async function fetchViaDeepDiveApi(data, { reviewScope = 'listingReviews', sortOption = 'Relevancy', isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort }) {
     const allReviews = [];
     let page = 1;
     let duplicatePages = 0;
@@ -655,7 +656,7 @@ async function fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delay
         const abortBeforeFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
         if (abortBeforeFetch) return abortBeforeFetch;
 
-        const result = await fetchDeepDiveReviewsViaApi(data, page);
+        const result = await fetchDeepDiveReviewsViaApi(data, page, { scope: reviewScope, sortOption });
         const abortAfterFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
         if (abortAfterFetch) return abortAfterFetch;
 
@@ -705,10 +706,9 @@ async function fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delay
     return abortedResult(shouldAbort, allReviews, jsDataSummary) || { reviews: allReviews, cancelled: false, jsDataSummary };
 }
 
-async function fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort }) {
+async function fetchViaReviewsApi(data, { reviewScope = 'listingReviews', sortOption = 'Relevancy', isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort }) {
     const allReviews = [];
     let page = 1;
-    let preferredTab = null;
     let duplicatePages = 0;
     let hasMore = true;
     let jsDataSummary = null;
@@ -717,7 +717,7 @@ async function fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayM
         const abortBeforeFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
         if (abortBeforeFetch) return abortBeforeFetch;
 
-        const result = await fetchReviewPage(data, page, preferredTab);
+        const result = await fetchReviewPage(data, page, { reviewScope, sortOption });
         const abortAfterFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
         if (abortAfterFetch) return abortAfterFetch;
 
@@ -729,10 +729,6 @@ async function fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayM
 
         if (pageReviews.length === 0) {
             break;
-        }
-
-        if (result.activeTab) {
-            preferredTab = result.activeTab;
         }
 
         const { addedCount, limitReached } = addPageReviews(allReviews, pageReviews, { isProUser, freeLimit });
@@ -844,11 +840,22 @@ async function fetchAllReviews(data, options = {}) {
         freeLimit = 50,
         delayMin = 1,
         delayMax = 3,
+        reviewScope = 'listingReviews',
+        sortOption = 'Relevancy',
         onProgress = null,
         shouldAbort = null
     } = options;
 
-    const fetchOptions = { isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort };
+    const fetchOptions = {
+        isProUser,
+        freeLimit,
+        delayMin,
+        delayMax,
+        reviewScope,
+        sortOption,
+        onProgress,
+        shouldAbort
+    };
 
     if (!data?.listingId || !data?.shopId) {
         throw new Error('Missing listing or shop ID. Open an Etsy listing page and try again.');

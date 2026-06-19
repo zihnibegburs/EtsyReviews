@@ -318,7 +318,7 @@ async function requestEtsyData() {
         etsyData = null;
         etsyDataCard.classList.add('hidden');
         fetchReviews.disabled = true;
-        setStatusText('Navigate to an Etsy listing page first', 'muted');
+        setStatusText('Navigate to an Etsy listing page first', 'navigate');
         return;
     }
 
@@ -336,7 +336,7 @@ async function requestEtsyData() {
             etsyData = null;
             etsyDataCard.classList.add('hidden');
             fetchReviews.disabled = true;
-            setStatusText('Navigate to an Etsy listing page first', 'muted');
+            setStatusText('Navigate to an Etsy listing page first', 'navigate');
             return;
         }
 
@@ -423,8 +423,16 @@ fetchReviews.addEventListener('click', async () => {
         return;
     }
 
-    console.log('📋 Opening reviews page for tab:', tab.id);
-    chrome.tabs.create({ url: chrome.runtime.getURL(`output.html?tabId=${tab.id}`) });
+    const reviewScope = document.querySelector('input[name="reviewScope"]:checked')?.value || 'listingReviews';
+    const sortOption = document.getElementById('sortOption')?.value || 'Relevancy';
+    const params = new URLSearchParams({
+        tabId: String(tab.id),
+        reviewScope,
+        sortOption
+    });
+
+    console.log('📋 Opening reviews page for tab:', tab.id, { reviewScope, sortOption });
+    chrome.tabs.create({ url: chrome.runtime.getURL(`output.html?${params.toString()}`) });
 });
 
 // =============== SUBSCRIPTION ===============

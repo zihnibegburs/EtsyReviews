@@ -22,10 +22,24 @@ function updatePremiumButton() {
 
 document.getElementById('premiumBtn')?.addEventListener('click', openCheckout);
 
-function getTabIdFromUrl() {
+const VALID_REVIEW_SCOPES = new Set(['listingReviews', 'shopReviews']);
+const VALID_SORT_OPTIONS = new Set(['Recency', 'Relevancy', 'Highest', 'Lowest']);
+
+function getUrlParams() {
     const params = new URLSearchParams(window.location.search);
     const tabId = parseInt(params.get('tabId'), 10);
-    return Number.isNaN(tabId) ? null : tabId;
+    const reviewScope = params.get('reviewScope') || 'listingReviews';
+    const sortOption = params.get('sortOption') || 'Relevancy';
+
+    return {
+        tabId: Number.isNaN(tabId) ? null : tabId,
+        reviewScope: VALID_REVIEW_SCOPES.has(reviewScope) ? reviewScope : 'listingReviews',
+        sortOption: VALID_SORT_OPTIONS.has(sortOption) ? sortOption : 'Relevancy'
+    };
+}
+
+function getTabIdFromUrl() {
+    return getUrlParams().tabId;
 }
 
 function formatRecommended(value) {
@@ -96,6 +110,7 @@ function exportReviewsToCSV() {
     }
 
     const rows = [[
+        '#',
         'Transaction ID',
         'Author',
         'Rating',
@@ -105,8 +120,9 @@ function exportReviewsToCSV() {
         'Date'
     ]];
 
-    allReviews.forEach((review) => {
+    allReviews.forEach((review, index) => {
         rows.push([
+            csvEscape(index + 1),
             csvEscape(review.transactionId || review.reviewId || ''),
             csvEscape(review.reviewer),
             csvEscape(review.rating),
@@ -145,6 +161,7 @@ function renderPage(page = 1) {
         <table>
             <thead>
                 <tr>
+                    <th>#</th>
                     <th>Reviewer</th>
                     <th>Rating</th>
                     <th>Date</th>
@@ -155,13 +172,14 @@ function renderPage(page = 1) {
             <tbody>
     `;
 
-    pageReviews.forEach((review) => {
+    pageReviews.forEach((review, index) => {
         const reviewerEsc = String(review.reviewer).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const textEsc = String(review.text).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const itemEsc = String(review.item).replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         tableHtml += `
             <tr>
+                <td class="review-number">${start + index + 1}</td>
                 <td>${reviewerEsc}</td>
                 <td class="review-rating">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</td>
                 <td>${review.date}</td>
@@ -174,7 +192,7 @@ function renderPage(page = 1) {
     tableHtml += '</tbody></table>';
     reviewsDiv.innerHTML = tableHtml;
     renderPaginationControls(page);
-    document.getElementById('totalReviews').textContent = allReviews.length;
+    updateLoadingTotalReviews(allReviews.length);
     document.getElementById('exportCsvBtn').disabled = false;
 }
 
@@ -261,6 +279,32 @@ function showLimitBanner() {
     });
 }
 
+function updateLoadingTotalReviews(count) {
+    const el = document.getElementById('loadingTotalReviews');
+    if (el) {
+        el.textContent = count;
+    }
+}
+
+function buildLoadingHtml(message, { stopping = false } = {}) {
+    const count = allReviews.length;
+    const stopLabel = stopping ? 'Stopping...' : 'Stop Fetching';
+    const stopDisabled = stopping ? ' disabled' : '';
+
+    return `
+        <div class="spinner"></div>
+        <div class="loading-stats">
+            <span class="loading-count" id="loadingTotalReviews">${count}</span>
+            <span class="loading-count-label">Total Reviews Collected</span>
+        </div>
+        <p>${message}</p>
+        <p class="hint">This may take a few minutes</p>
+        <div class="loading-actions">
+            <button id="stopFetchBtn" class="btn-stop"${stopDisabled}>${stopLabel}</button>
+        </div>
+    `;
+}
+
 function hideLoading() {
     isFetching = false;
     document.getElementById('loading').style.display = 'none';
@@ -276,13 +320,7 @@ function stopFetching() {
 function showStoppingState() {
     const loadingDiv = document.getElementById('loading');
     if (!loadingDiv || loadingDiv.style.display === 'none') return;
-    loadingDiv.innerHTML = `
-        <div class="spinner"></div>
-        <p>Stopping fetch...</p>
-        <div class="loading-actions">
-            <button id="stopFetchBtn" class="btn-stop" disabled>Stopping...</button>
-        </div>
-    `;
+    loadingDiv.innerHTML = buildLoadingHtml('Stopping fetch...', { stopping: true });
 }
 
 function handleFetchComplete(response, cancelled = false) {
@@ -327,14 +365,7 @@ function handleFetchComplete(response, cancelled = false) {
 function updateLoading(message) {
     const loadingDiv = document.getElementById('loading');
     loadingDiv.style.display = 'block';
-    loadingDiv.innerHTML = `
-        <div class="spinner"></div>
-        <p>${message}</p>
-        <p class="hint">This may take a few minutes</p>
-        <div class="loading-actions">
-            <button id="stopFetchBtn" class="btn-stop">Stop Fetching</button>
-        </div>
-    `;
+    loadingDiv.innerHTML = buildLoadingHtml(message);
     document.getElementById('stopFetchBtn')?.addEventListener('click', stopFetching);
 }
 
@@ -346,7 +377,7 @@ chrome.runtime.onMessage.addListener((message) => {
         allReviews = message.reviews || [];
         document.getElementById('displayListingId').textContent = message.listingId;
         document.getElementById('displayShopId').textContent = message.shopId;
-        document.getElementById('totalReviews').textContent = allReviews.length;
+        updateLoadingTotalReviews(allReviews.length);
         updateJsDataHeader(message.jsData);
         const loadingMessage = document.querySelector('#loading > p');
         if (loadingMessage) {
@@ -369,9 +400,55 @@ chrome.runtime.onMessage.addListener((message) => {
     }
 });
 
+async function startReviewFetchFlow(tabId, { reviewScope, sortOption }) {
+    const reviewsDiv = document.getElementById('reviews');
+
+    showSubscriptionBanner();
+    isFetching = true;
+    stopRequested = false;
+    fetchFinished = false;
+    updateLoading('Fetching reviews from Etsy...');
+
+    const delayConfig = await new Promise((resolve) => {
+        chrome.storage.local.get(['fetchDelayMin', 'fetchDelayMax'], (result) => {
+            resolve({
+                min: result.fetchDelayMin || 1,
+                max: result.fetchDelayMax || 3
+            });
+        });
+    });
+
+    chrome.runtime.sendMessage({
+        type: 'startReviewFetch',
+        tabId,
+        isProUser,
+        freeLimit: FREE_USER_REVIEW_LIMIT,
+        delayMin: delayConfig.min,
+        delayMax: delayConfig.max,
+        reviewScope,
+        sortOption
+    }, (response) => {
+        if (chrome.runtime.lastError) {
+            hideLoading();
+            reviewsDiv.innerHTML = '<div class="error">⚠️ Could not start review fetch. Reload the extension and try again.</div>';
+            return;
+        }
+
+        if (response?.error) {
+            hideLoading();
+            reviewsDiv.innerHTML = `<div class="error">⚠️ ${response.error}</div>`;
+            return;
+        }
+
+        if (response?.reviews) {
+            handleFetchComplete(response, !!response.cancelled);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const reviewsDiv = document.getElementById('reviews');
-    const tabId = getTabIdFromUrl();
+    const { tabId, reviewScope, sortOption } = getUrlParams();
     currentTabId = tabId;
 
     if (!tabId) {
@@ -403,43 +480,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('Subscription check failed:', error);
     }
 
-    showSubscriptionBanner();
-    isFetching = true;
-    stopRequested = false;
-    fetchFinished = false;
-    updateLoading('Fetching reviews from Etsy...');
-
-    const delayConfig = await new Promise((resolve) => {
-        chrome.storage.local.get(['fetchDelayMin', 'fetchDelayMax'], (result) => {
-            resolve({
-                min: result.fetchDelayMin || 1,
-                max: result.fetchDelayMax || 3
-            });
-        });
-    });
-
-    chrome.runtime.sendMessage({
-        type: 'startReviewFetch',
-        tabId,
-        isProUser,
-        freeLimit: FREE_USER_REVIEW_LIMIT,
-        delayMin: delayConfig.min,
-        delayMax: delayConfig.max
-    }, (response) => {
-        if (chrome.runtime.lastError) {
-            hideLoading();
-            reviewsDiv.innerHTML = '<div class="error">⚠️ Could not start review fetch. Reload the extension and try again.</div>';
-            return;
-        }
-
-        if (response?.error) {
-            hideLoading();
-            reviewsDiv.innerHTML = `<div class="error">⚠️ ${response.error}</div>`;
-            return;
-        }
-
-        if (response?.reviews) {
-            handleFetchComplete(response, !!response.cancelled);
-        }
-    });
+    updatePremiumButton();
+    startReviewFetchFlow(tabId, { reviewScope, sortOption });
 });

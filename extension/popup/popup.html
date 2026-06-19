@@ -100,7 +100,7 @@
                     <div id="pageHome" class="tab-page active">
                         <div class="content-section">
                             <h2>Reviews</h2>
-                            <p id="statusText" class="status-text muted">Navigate to an Etsy listing to start</p>
+                            <p id="statusText" class="status-text navigate">Navigate to an Etsy listing page first</p>
 
                             <div class="info-card hidden" id="etsyDataCard">
                                 <h3>Detected Listing</h3>
@@ -115,6 +115,31 @@
                                 <div class="info-row">
                                     <span class="label">Status</span>
                                     <span id="displayStatus" class="status-badge">Ready</span>
+                                </div>
+                            </div>
+
+                            <div class="fetch-options-card">
+                                <div class="option-group">
+                                    <span class="option-label">Review scope</span>
+                                    <div class="scope-options">
+                                        <label class="scope-option">
+                                            <input type="radio" name="reviewScope" value="listingReviews" checked>
+                                            <span>Item</span>
+                                        </label>
+                                        <label class="scope-option">
+                                            <input type="radio" name="reviewScope" value="shopReviews">
+                                            <span>Shop</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="option-group">
+                                    <label class="option-label" for="sortOption">Sort by</label>
+                                    <select id="sortOption" class="sort-select">
+                                        <option value="Recency">Recency</option>
+                                        <option value="Relevancy" selected>Relevancy</option>
+                                        <option value="Highest">Highest</option>
+                                        <option value="Lowest">Lowest</option>
+                                    </select>
                                 </div>
                             </div>
 

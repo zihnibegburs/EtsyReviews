@@ -75,7 +75,7 @@ async function tryDomFallback(tabId, options) {
     return null;
 }
 
-async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax }) {
+async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax, reviewScope, sortOption }) {
     fetchAborted = false;
     lastProgressReviews = [];
     lastJsDataSummary = null;
@@ -114,6 +114,8 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
             freeLimit,
             delayMin,
             delayMax,
+            reviewScope,
+            sortOption,
             onProgress,
             shouldAbort
         });

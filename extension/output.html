@@ -8,29 +8,54 @@
     <style>
         body {
             background: var(--color-bg);
-            padding: 24px;
+            padding: 8px;
         }
 
         .container {
-            max-width: 1100px;
+            max-width: 100%;
             margin: 0 auto;
         }
 
         .header {
             background: var(--color-surface);
-            padding: 24px 28px;
+            padding: 20px 12px;
             border-radius: var(--radius-lg);
             border: 1px solid var(--color-border-light);
             box-shadow: var(--shadow-sm);
             margin-bottom: 16px;
         }
 
-        .header h1 {
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .header-top h1 {
             color: var(--color-text);
             font-size: 22px;
             font-weight: 600;
             margin-bottom: 0;
             letter-spacing: -0.01em;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .header-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition);
         }
 
         .header-info {
@@ -67,35 +92,6 @@
             line-height: 1.4;
         }
 
-        .controls {
-            background: var(--color-surface);
-            padding: 16px 20px;
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--color-border-light);
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-
-        .controls-meta {
-            color: var(--color-text-muted);
-            font-size: 13px;
-        }
-
-        .controls button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: var(--radius-md);
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background var(--transition);
-        }
-
         .btn-export {
             background: var(--color-primary);
             color: white;
@@ -129,24 +125,46 @@
             opacity: 0.92;
         }
 
-        .controls-actions {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
         #loading .loading-actions {
             margin-top: 20px;
         }
 
         #loading {
             background: var(--color-surface);
-            padding: 48px;
+            padding: 40px 24px;
             border-radius: var(--radius-lg);
             border: 1px solid var(--color-border-light);
             text-align: center;
             box-shadow: var(--shadow-sm);
+        }
+
+        .loading-stats {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            margin: 20px 0 8px;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #f0f3ff 0%, #e8f4fd 100%);
+            border: 2px solid var(--color-primary);
+            border-radius: var(--radius-md);
+        }
+
+        .loading-count {
+            font-size: 42px;
+            font-weight: 800;
+            color: var(--color-primary);
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+
+        .loading-count-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
         }
 
         #loading p {
@@ -219,6 +237,14 @@
             font-size: 14px;
         }
 
+        .review-number {
+            color: var(--color-text-muted);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            text-align: center;
+            width: 48px;
+        }
+
         .review-item a {
             color: var(--color-primary);
             text-decoration: none;
@@ -279,12 +305,14 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Etsy Reviews Export</h1>
-            <div class="header-info">
-                <div class="info-item">
-                    <span class="info-label">Total Reviews</span>
-                    <span class="info-value" id="totalReviews">0</span>
+            <div class="header-top">
+                <h1>Etsy Reviews Export</h1>
+                <div class="header-actions">
+                    <button id="premiumBtn" class="btn-premium" style="display: none;">Get Premium Subscription</button>
+                    <button id="exportCsvBtn" class="btn-export" disabled>Export All to CSV</button>
                 </div>
+            </div>
+            <div class="header-info">
                 <div class="info-item">
                     <span class="info-label">Listing ID</span>
                     <span class="info-value" id="displayListingId">-</span>
@@ -308,16 +336,12 @@
             </div>
         </div>
 
-        <div class="controls">
-            <span class="controls-meta">10 reviews per page · Export includes all collected reviews</span>
-            <div class="controls-actions">
-                <button id="premiumBtn" class="btn-premium" style="display: none;">Get Premium Subscription</button>
-                <button id="exportCsvBtn" class="btn-export" disabled>Export All to CSV</button>
-            </div>
-        </div>
-
         <div id="loading">
             <div class="spinner"></div>
+            <div class="loading-stats">
+                <span class="loading-count" id="loadingTotalReviews">0</span>
+                <span class="loading-count-label">Total Reviews Collected</span>
+            </div>
             <p>Fetching reviews from Etsy...</p>
             <p class="hint">This may take a few minutes</p>
         </div>
