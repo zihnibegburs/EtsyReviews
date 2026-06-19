@@ -1,18 +1,138 @@
 // Background Service Worker - Etsy Review Scraper
-importScripts('../utils/config.js');
+importScripts('../utils/config.js', '../utils/reviewFetcher.js');
 
 console.log('🚀 Background service worker starting...');
 console.log('🔗 API:', API_CONFIG.BASE_URL);
 
-// Store Etsy data
 let etsyData = null;
+let activeFetchPromise = null;
 
-// Listen for messages
+function broadcastReviewMessage(message) {
+    chrome.runtime.sendMessage(message).catch(() => {
+        // output page may not be listening yet
+    });
+}
+
+async function getEtsyDataFromTab(tabId) {
+    try {
+        const response = await chrome.tabs.sendMessage(tabId, { action: 'collectEtsyData' });
+        if (response?.listingId && response?.shopId) {
+            etsyData = {
+                csrfToken: response.csrfToken || null,
+                listingId: response.listingId,
+                shopId: response.shopId,
+                listingUrl: response.listingUrl || null,
+                isExternalReferrer: !!response.isExternalReferrer,
+                categoryPath: []
+            };
+            return etsyData;
+        }
+    } catch (error) {
+        console.warn('Could not collect Etsy data from tab:', error.message);
+    }
+
+    return null;
+}
+
+async function resolveEtsyData(tabId) {
+    if (etsyData?.listingId && etsyData?.shopId && etsyData?.csrfToken) {
+        return { ...etsyData };
+    }
+
+    const tabData = tabId ? await getEtsyDataFromTab(tabId) : null;
+    if (tabData) {
+        return { ...tabData };
+    }
+
+    if (etsyData?.listingId && etsyData?.shopId) {
+        return { ...etsyData };
+    }
+
+    return null;
+}
+
+async function tryDomFallback(tabId, options) {
+    if (!tabId) {
+        return null;
+    }
+
+    try {
+        const response = await chrome.tabs.sendMessage(tabId, {
+            action: 'fetchReviewsDomFallback',
+            ...options
+        });
+        if (response?.reviews?.length) {
+            return response;
+        }
+    } catch (error) {
+        console.warn('DOM fallback unavailable:', error.message);
+    }
+
+    return null;
+}
+
+async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax }) {
+    const data = await resolveEtsyData(tabId);
+    if (!data) {
+        throw new Error('Missing listing or shop ID. Refresh the Etsy listing page and try again.');
+    }
+
+    const onProgress = (reviews, page) => {
+        broadcastReviewMessage({
+            type: 'reviewProgress',
+            listingId: data.listingId,
+            shopId: data.shopId,
+            page,
+            total: reviews.length,
+            reviews,
+            limitReached: !isProUser && reviews.length >= freeLimit
+        });
+    };
+
+    try {
+        const result = await ReviewFetcher.fetchAllReviews(data, {
+            isProUser,
+            freeLimit,
+            delayMin,
+            delayMax,
+            onProgress
+        });
+
+        broadcastReviewMessage({ type: 'reviewComplete', ...result });
+        return result;
+    } catch (apiError) {
+        console.warn('API fetch failed, trying DOM fallback:', apiError.message);
+
+        const domResult = await tryDomFallback(tabId, {
+            isProUser,
+            freeLimit,
+            delayMin,
+            delayMax
+        });
+
+        if (domResult?.reviews?.length) {
+            const result = {
+                listingId: domResult.listingId || data.listingId,
+                shopId: domResult.shopId || data.shopId,
+                reviews: domResult.reviews,
+                limitReached: !isProUser && domResult.reviews.length >= freeLimit
+            };
+            broadcastReviewMessage({ type: 'reviewComplete', ...result });
+            return result;
+        }
+
+        broadcastReviewMessage({
+            type: 'reviewError',
+            message: apiError.message || 'Failed to fetch reviews'
+        });
+        throw apiError;
+    }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    console.log('📨 Background received message:', msg.type, 'from:', sender.tab ? 'content script' : 'popup');
+    console.log('📨 Background received message:', msg.type, 'from:', sender.tab ? 'content script' : 'extension page');
 
-    if (msg.type === "etsyData") {
-        // Store Etsy data from content script
+    if (msg.type === 'etsyData') {
         etsyData = {
             csrfToken: msg.csrfToken,
             listingId: msg.listingId,
@@ -31,8 +151,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return false;
     }
 
-    if (msg.type === "getEtsyData") {
-        // Send Etsy data to popup
+    if (msg.type === 'getEtsyData') {
         console.log('📤 Sending Etsy data to popup:', etsyData ? {
             listingId: etsyData.listingId,
             shopId: etsyData.shopId,
@@ -42,17 +161,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return false;
     }
 
-    if (msg.type === "checkSubscription") {
+    if (msg.type === 'startReviewFetch') {
+        if (activeFetchPromise) {
+            sendResponse({ error: 'Review fetch already in progress' });
+            return false;
+        }
+
+        activeFetchPromise = startReviewFetch(msg)
+            .then((result) => {
+                sendResponse({ success: true, ...result });
+                return result;
+            })
+            .catch((error) => {
+                sendResponse({ error: error.message || 'Failed to fetch reviews' });
+                throw error;
+            })
+            .finally(() => {
+                activeFetchPromise = null;
+            });
+
+        return true;
+    }
+
+    if (msg.type === 'checkSubscription') {
         checkSubscriptionStatus()
-            .then(result => {
+            .then((result) => {
                 console.log('✅ Subscription check complete:', result);
                 sendResponse(result);
             })
-            .catch(error => {
+            .catch((error) => {
                 console.error('❌ Check subscription error:', error);
                 sendResponse({ error: error.message });
             });
-        return true; // Async response
+        return true;
     }
 
     console.warn('⚠️ Unknown message type:', msg.type);
@@ -60,7 +201,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
 });
 
-// Check subscription status
 async function checkSubscriptionStatus() {
     try {
         const result = await chrome.storage.local.get(['auth_token']);
@@ -76,7 +216,7 @@ async function checkSubscriptionStatus() {
         const response = await fetch(`${API_CONFIG.BASE_URL}/subscription/me`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -113,7 +253,6 @@ async function checkSubscriptionStatus() {
     }
 }
 
-// Listen for tab updates
 if (chrome.tabs && chrome.tabs.onUpdated) {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         if (changeInfo.status === 'complete' && tab.url && tab.url.includes('etsy.com/listing/')) {
@@ -124,4 +263,3 @@ if (chrome.tabs && chrome.tabs.onUpdated) {
 }
 
 console.log('✅ Background service worker loaded successfully');
-

@@ -8,6 +8,7 @@ console.log('🚀 Etsy Review Scraper - Content script loaded');
 console.log('📍 Current URL:', window.location.href);
 
 const LISTING_ID_PATTERN = /\/listing\/(\d+)/;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function findShopIdInObject(obj, depth = 0) {
     if (!obj || depth > 10 || typeof obj !== 'object') return null;
@@ -190,43 +191,6 @@ function formatReviewDate(raw) {
     return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
 }
 
-function extractReviewHtml(payload, activeTab = 'listing_reviews') {
-    const root = payload?.output?.reviews ?? payload?.output;
-    if (!root) return '';
-
-    if (typeof root === 'string') {
-        return root;
-    }
-
-    if (typeof root === 'object') {
-        const preferredKeys = [
-            activeTab,
-            'shop_reviews',
-            'listing_reviews',
-            'reviews',
-            'html',
-            'body',
-            'content',
-            'markup'
-        ];
-
-        for (const key of preferredKeys) {
-            const value = root[key];
-            if (typeof value === 'string' && value.trim()) {
-                return value;
-            }
-        }
-
-        for (const value of Object.values(root)) {
-            if (typeof value === 'string' && value.includes('review-card')) {
-                return value;
-            }
-        }
-    }
-
-    return '';
-}
-
 function parseDeepDiveReviewNode(node) {
     const reviewId = node.getAttribute('data-review-region') || null;
     const ratingLabel = node.querySelector('[role="img"][aria-label*="Rating"]')?.getAttribute('aria-label') || '';
@@ -238,7 +202,6 @@ function parseDeepDiveReviewNode(node) {
         'Anonymous';
 
     const dateRaw = node.querySelector('span.wt-text-body-small--tight, .wt-text-body-small')?.textContent?.trim() || '';
-
     const itemLinkEl = node.querySelector('a[href*="/listing/"]');
     const item = itemLinkEl?.textContent?.trim() || '';
     const itemUrl = itemLinkEl?.getAttribute('href') || '';
@@ -265,15 +228,41 @@ function parseDeepDiveReviewNode(node) {
     };
 }
 
-function parseDeepDiveReviewsFromRoot(root) {
-    if (!root) return [];
+function parseReviewCardNode(node) {
+    const reviewer = node.querySelector(
+        'a.wt-text-link-no-underline, [data-reviewer-name], .shop2-review-byline a'
+    )?.textContent?.trim() || 'Anonymous';
 
-    const container = root.querySelector?.('[data-deep-dive-reviews-container="true"]') || root;
-    const reviewNodes = container.querySelectorAll?.('[data-review-region]') || [];
+    const ratingValue = node.querySelector('input[name="rating"]')?.value ||
+        node.querySelector('[aria-label*="out of 5"]')?.getAttribute('aria-label')?.match(/(\d)/)?.[1] ||
+        '0';
+
+    const text = node.querySelector('.wt-text-body, [data-review-text], p')?.textContent?.trim() || '';
+    const itemLinkEl = node.querySelector('a[href*="/listing/"]');
+    const item = itemLinkEl?.textContent?.trim() || '';
+    const dateRaw = node.querySelector('.wt-text-body-small, time, .wt-text-caption')?.textContent?.trim() || '';
+
+    if (!text && !parseInt(ratingValue, 10)) {
+        return null;
+    }
+
+    return {
+        reviewer,
+        rating: parseInt(ratingValue, 10) || 0,
+        text,
+        item,
+        itemUrl: itemLinkEl?.getAttribute('href') || '',
+        date: formatReviewDate(dateRaw)
+    };
+}
+
+function parseReviewsFromDocument() {
     const seen = new Set();
 
-    return Array.from(reviewNodes).map((node) => {
-        const review = parseDeepDiveReviewNode(node);
+    return Array.from(document.querySelectorAll('[data-review-region], .review-card')).map((node) => {
+        const review = node.hasAttribute('data-review-region')
+            ? parseDeepDiveReviewNode(node)
+            : parseReviewCardNode(node);
         if (!review) return null;
 
         const key = review.reviewId || `${review.reviewer}|${review.text}|${review.date}`;
@@ -283,110 +272,35 @@ function parseDeepDiveReviewsFromRoot(root) {
     }).filter(Boolean);
 }
 
-function parseDeepDiveReviewsFromDocument() {
-    return parseDeepDiveReviewsFromRoot(document);
+function isDuplicateReview(review, existingReviews) {
+    if (review.reviewId) {
+        return existingReviews.some((existing) => existing.reviewId === review.reviewId);
+    }
+
+    return existingReviews.some((existing) =>
+        existing.reviewer === review.reviewer &&
+        existing.text === review.text &&
+        existing.date === review.date
+    );
 }
 
-function parseReviewsFromHtml(htmlString) {
-    if (!htmlString?.trim()) return [];
+function findNextReviewPageButton() {
+    const selectors = [
+        'nav[aria-label*="Pagination"] a[rel="next"]:not([aria-disabled="true"])',
+        '[data-clg-id="WtPagination"] a[aria-label*="Next"]:not([aria-disabled="true"])',
+        'a.wt-pagination__item--next:not([aria-disabled="true"])',
+        'a[aria-label="Next page"]:not([aria-disabled="true"])'
+    ];
 
-    const doc = new DOMParser().parseFromString(htmlString, 'text/html');
-    const deepDiveReviews = parseDeepDiveReviewsFromRoot(doc);
-    if (deepDiveReviews.length > 0) {
-        return deepDiveReviews;
+    for (const selector of selectors) {
+        const button = document.querySelector(selector);
+        if (button) return button;
     }
 
-    let reviewNodes = doc.querySelectorAll('.review-card');
-
-    if (reviewNodes.length === 0) {
-        const ratingInputs = doc.querySelectorAll('input[name="rating"]');
-        reviewNodes = Array.from(ratingInputs)
-            .map((input) => input.closest('.review-card, [data-review-card], [data-review-id], li, article'))
-            .filter(Boolean);
-    }
-
-    const seen = new Set();
-
-    return Array.from(reviewNodes).map((node) => {
-        const reviewer = node.querySelector(
-            'a.wt-text-link-no-underline.wt-text-title-small, [data-reviewer-name], .shop2-review-byline a, .wt-text-caption a'
-        )?.textContent?.trim() || 'Anonymous';
-
-        const ratingValue = node.querySelector('input[name="rating"]')?.value ||
-            node.querySelector('[aria-label*="out of 5"]')?.getAttribute('aria-label')?.match(/(\d)/)?.[1] ||
-            node.querySelector('[aria-label*="star"]')?.getAttribute('aria-label')?.match(/(\d)/)?.[1] ||
-            '0';
-
-        const text = node.querySelector(
-            '.wt-text-body, [data-review-text], .prose, p[data-review-text], .wt-break-word'
-        )?.textContent?.trim() || '';
-
-        const itemLinkEl = node.querySelector('a[data-review-link], [data-review-listing], .wt-text-truncate a, a[href*="/listing/"]');
-        const item = itemLinkEl?.textContent?.trim() || '';
-        const itemUrl = itemLinkEl?.getAttribute('href') || '';
-        const itemListingId = itemUrl.match(/\/listing\/(\d+)/)?.[1];
-        const dateRaw = node.querySelector('.wt-text-body-small, [data-review-date], time, .wt-text-caption')?.textContent?.trim() || '';
-
-        const key = `${reviewer}|${text}|${dateRaw}`;
-        if (seen.has(key)) {
-            return null;
-        }
-        seen.add(key);
-
-        return {
-            reviewer,
-            rating: parseInt(ratingValue, 10) || 0,
-            text,
-            item,
-            itemUrl,
-            listingId: itemListingId ? parseInt(itemListingId, 10) : null,
-            date: formatReviewDate(dateRaw)
-        };
-    }).filter((review) => review && (review.text || review.rating > 0));
-}
-
-function parseReviewsFromDocument() {
-    const deepDiveReviews = parseDeepDiveReviewsFromDocument();
-    if (deepDiveReviews.length > 0) {
-        return deepDiveReviews;
-    }
-    return parseReviewsFromHtml(document.documentElement.outerHTML);
-}
-
-function findShowAllReviewsButton() {
-    for (const button of document.querySelectorAll('button[data-clg-id="WtButton"]')) {
-        if (/^show all$/i.test(button.textContent.trim())) {
-            return button;
-        }
-    }
-
-    return Array.from(document.querySelectorAll('button.wt-btn--secondary.wt-btn--small'))
-        .find((button) => /show all/i.test(button.textContent.trim())) || null;
-}
-
-function findNextDeepDivePageButton() {
-    for (const button of document.querySelectorAll('button.wt-action-group__item')) {
-        const label = button.querySelector('.wt-screen-reader-only')?.textContent?.trim();
-        if (label === 'Next' && button.getAttribute('aria-disabled') !== 'true' && !button.disabled) {
-            return button;
-        }
-    }
-
-    return null;
-}
-
-async function waitForDeepDiveReviewsContainer(maxWaitMs = 15000) {
-    const startedAt = Date.now();
-
-    while (Date.now() - startedAt < maxWaitMs) {
-        const container = document.querySelector('[data-deep-dive-reviews-container="true"]');
-        if (container?.querySelector('[data-review-region]')) {
-            return container;
-        }
-        await sleep(300);
-    }
-
-    return null;
+    const pageLinks = Array.from(document.querySelectorAll('a[href*="page="]'));
+    const current = new URLSearchParams(window.location.search).get('page') || '1';
+    const nextPage = String(parseInt(current, 10) + 1);
+    return pageLinks.find((link) => link.getAttribute('href')?.includes(`page=${nextPage}`)) || null;
 }
 
 async function ensureReviewsSectionVisible() {
@@ -413,625 +327,15 @@ async function ensureReviewsSectionVisible() {
     await sleep(500);
 }
 
-async function openDeepDiveReviewsPanel() {
+async function fetchReviewsDomFallback({ isProUser = false, freeLimit = 50, delayMin = 1, delayMax = 3 } = {}) {
+    const data = collectEtsyData();
+    if (!data.listingId || !data.shopId) {
+        throw new Error('Missing listing or shop ID on this page');
+    }
+
     await ensureReviewsSectionVisible();
 
-    const existingContainer = document.querySelector('[data-deep-dive-reviews-container="true"]');
-    if (existingContainer?.querySelector('[data-review-region]')) {
-        console.log('📍 Deep dive reviews panel already open');
-        return existingContainer;
-    }
-
-    const showAllButton = findShowAllReviewsButton();
-    if (!showAllButton) {
-        throw new Error('Could not find the "Show all" reviews button. Scroll to Reviews and try again.');
-    }
-
-    console.log('🖱️ Clicking "Show all" reviews button');
-    showAllButton.scrollIntoView({ behavior: 'auto', block: 'center' });
-    showAllButton.click();
-
-    const container = await waitForDeepDiveReviewsContainer();
-    if (!container) {
-        throw new Error('Reviews panel did not open after clicking "Show all".');
-    }
-
-    return container;
-}
-
-function getListingReviewsUrl(data, page) {
-    const suffix = page > 1 ? `?page=${page}` : '';
-    return `https://www.etsy.com/listing/${data.listingId}/reviews${suffix}`;
-}
-
-function extractPaginationInfo(html, currentPage) {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-
-    const nextLink = doc.querySelector(
-        'nav[aria-label*="Pagination"] a[rel="next"], ' +
-        '[data-clg-id="WtPagination"] a[aria-label*="Next"], ' +
-        'a.wt-pagination__item--next, ' +
-        'a[aria-label="Next page"]'
-    );
-    if (nextLink && nextLink.getAttribute('aria-disabled') !== 'true') {
-        return { hasMore: true };
-    }
-
-    let maxPage = currentPage;
-    doc.querySelectorAll('a[href*="page="]').forEach((anchor) => {
-        const match = (anchor.getAttribute('href') || '').match(/[?&]page=(\d+)/);
-        if (match) {
-            maxPage = Math.max(maxPage, parseInt(match[1], 10));
-        }
-    });
-
-    if (maxPage > currentPage) {
-        return { hasMore: true };
-    }
-
-    const pageText = doc.body?.textContent || '';
-    const totalMatch = pageText.match(/(\d+)\s*results?,?\s*page\s*(\d+)\s*of\s*(\d+)/i) ||
-        pageText.match(/page\s*(\d+)\s*of\s*(\d+)/i);
-    if (totalMatch) {
-        const current = parseInt(totalMatch[totalMatch.length - 2], 10);
-        const total = parseInt(totalMatch[totalMatch.length - 1], 10);
-        if (!Number.isNaN(current) && !Number.isNaN(total)) {
-            return { hasMore: current < total };
-        }
-    }
-
-    return { hasMore: null };
-}
-
-function filterReviewsForListing(reviews, listingId) {
-    if (!listingId) return reviews;
-    return reviews.filter((review) => {
-        if (review.listingId) {
-            return review.listingId === listingId;
-        }
-        if (review.itemUrl) {
-            return review.itemUrl.includes(`/listing/${listingId}`);
-        }
-        return true;
-    });
-}
-
-function findNextReviewPageButton() {
-    const selectors = [
-        'nav[aria-label*="Pagination"] a[rel="next"]:not([aria-disabled="true"])',
-        '[data-clg-id="WtPagination"] a[aria-label*="Next"]:not([aria-disabled="true"])',
-        'a.wt-pagination__item--next:not([aria-disabled="true"])',
-        'a[aria-label="Next page"]:not([aria-disabled="true"])'
-    ];
-
-    for (const selector of selectors) {
-        const button = document.querySelector(selector);
-        if (button) return button;
-    }
-
-    const pageLinks = Array.from(document.querySelectorAll('a[href*="page="]'));
-    const current = new URLSearchParams(window.location.search).get('page') || '1';
-    const nextPage = String(parseInt(current, 10) + 1);
-    return pageLinks.find((link) => link.getAttribute('href')?.includes(`page=${nextPage}`)) || null;
-}
-
-function getListingReferer(listingId) {
-    return `https://www.etsy.com/listing/${listingId}`;
-}
-
-async function refreshCsrfToken(data) {
-    const pageToken = extractCsrfToken();
-    if (pageToken) {
-        data.csrfToken = pageToken;
-        return pageToken;
-    }
-
-    try {
-        const response = await fetch('https://www.etsy.com/', {
-            credentials: 'include',
-            headers: { accept: 'text/html' }
-        });
-        if (!response.ok) {
-            return data.csrfToken || null;
-        }
-
-        const html = await response.text();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const token = doc.querySelector('meta[name="csrf_nonce"]')?.content ||
-            doc.querySelector('meta[name="x-csrf-token"]')?.content ||
-            null;
-
-        if (token) {
-            data.csrfToken = token;
-        }
-        return token;
-    } catch {
-        return data.csrfToken || null;
-    }
-}
-
-function buildEtsyApiHeaders(data, listingId) {
-    return {
-        'Content-Type': 'application/json',
-        'x-csrf-token': data.csrfToken,
-        'x-requested-with': 'XMLHttpRequest',
-        accept: '*/*',
-        referer: data.listingUrl || getListingReferer(listingId)
-    };
-}
-
-function buildReviewRequestBody(data, page, activeTab) {
-    return {
-        log_performance_metrics: true,
-        specs: {
-            reviews: [
-                'Etsy\\Modules\\ListingPage\\Reviews\\DataComposer',
-                {
-                    listing_id: Number(data.listingId),
-                    shop_id: Number(data.shopId),
-                    render_complete: true,
-                    active_tab: activeTab,
-                    should_lazy_load_images: true,
-                    should_use_pagination: true,
-                    page,
-                    should_show_variations: false,
-                    is_reviews_untabbed_cached: false,
-                    was_landing_from_external_referrer: !!data.isExternalReferrer,
-                    sort_option: 'Relevancy'
-                }
-            ]
-        },
-        runtime_analysis: false
-    };
-}
-
-async function fetchReviewsViaApi(data, page, activeTab) {
-    await refreshCsrfToken(data);
-    if (!data.csrfToken) {
-        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
-    }
-
-    const response = await fetch('https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/reviews', {
-        method: 'POST',
-        headers: buildEtsyApiHeaders(data, data.listingId),
-        credentials: 'include',
-        body: JSON.stringify(buildReviewRequestBody(data, page, activeTab))
-    });
-
-    if (response.status === 429) {
-        throw new Error('Rate limit reached. Please wait and try again.');
-    }
-
-    if (!response.ok) {
-        throw new Error(`Etsy API error: ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const htmlString = typeof payload?.output?.reviews === 'string'
-        ? payload.output.reviews
-        : extractReviewHtml(payload, activeTab);
-    const reviews = parseReviewsFromHtml(htmlString);
-    const hasMore = extractHasMoreReviews(payload, reviews.length);
-
-    return { reviews, hasMore, htmlEmpty: !htmlString.trim(), activeTab };
-}
-
-function extractHasMoreReviews(payload, reviewCount) {
-    const root = payload?.output?.reviews;
-    if (root && typeof root === 'object') {
-        if (root.has_more === false || root.has_more_reviews === false) {
-            return false;
-        }
-        if (root.has_more === true || root.has_more_reviews === true) {
-            return true;
-        }
-        if (typeof root.total_pages === 'number' && typeof root.page === 'number') {
-            return root.page < root.total_pages;
-        }
-    }
-
-    // Unknown — caller decides based on whether new reviews were added
-    return reviewCount > 0 ? null : false;
-}
-
-function isDuplicateReview(review, existingReviews) {
-    if (review.reviewId) {
-        return existingReviews.some((existing) => existing.reviewId === review.reviewId);
-    }
-
-    return existingReviews.some((existing) =>
-        existing.reviewer === review.reviewer &&
-        existing.text === review.text &&
-        existing.date === review.date
-    );
-}
-
-async function waitForNewDeepDiveReviews(previousIds, maxWaitMs = 10000) {
-    const startedAt = Date.now();
-
-    while (Date.now() - startedAt < maxWaitMs) {
-        const currentReviews = parseDeepDiveReviewsFromDocument();
-        const hasNewReview = currentReviews.some((review) => review.reviewId && !previousIds.has(review.reviewId));
-        if (hasNewReview) {
-            return true;
-        }
-        await sleep(300);
-    }
-
-    return false;
-}
-
-function collectReviewIds(reviews) {
-    return new Set(reviews.map((review) => review.reviewId).filter(Boolean));
-}
-
-async function fetchReviewsViaDeepDiveDom({ isProUser, freeLimit, delayMin, delayMax, onProgress }) {
     const allReviews = [];
-    let page = 1;
-    let stagnantRounds = 0;
-
-    while (stagnantRounds < 2 && page <= 500) {
-        const pageReviews = parseDeepDiveReviewsFromDocument();
-        let addedCount = 0;
-
-        for (const review of pageReviews) {
-            if (!isProUser && allReviews.length >= freeLimit) {
-                break;
-            }
-
-            if (!isDuplicateReview(review, allReviews)) {
-                allReviews.push(review);
-                addedCount += 1;
-            }
-        }
-
-        if (onProgress) {
-            onProgress(allReviews, page);
-        }
-
-        if (!isProUser && allReviews.length >= freeLimit) {
-            break;
-        }
-
-        const nextButton = findNextDeepDivePageButton();
-        if (!nextButton) {
-            break;
-        }
-
-        if (addedCount === 0) {
-            stagnantRounds += 1;
-        } else {
-            stagnantRounds = 0;
-        }
-
-        const previousIds = collectReviewIds(allReviews);
-        nextButton.scrollIntoView({ behavior: 'auto', block: 'center' });
-        nextButton.click();
-
-        const loaded = await waitForNewDeepDiveReviews(previousIds);
-        if (!loaded && stagnantRounds >= 1) {
-            break;
-        }
-
-        page += 1;
-        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
-    }
-
-    return allReviews;
-}
-
-async function fetchReviewsViaDeepDivePanel(data, { isProUser, freeLimit, delayMin, delayMax, onProgress }) {
-    if (!data.csrfToken) {
-        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
-    }
-
-    try {
-        await openDeepDiveReviewsPanel();
-        reviewFetchDebug.setContext({ panelOpened: true });
-    } catch (error) {
-        reviewFetchDebug.setContext({ panelOpened: false, panelError: error.message });
-        console.warn('Show all click failed, continuing with deep dive API:', error.message);
-    }
-
-    const allReviews = [];
-    let page = 1;
-    let duplicatePages = 0;
-    let stopReason = null;
-
-    while (page <= 500) {
-        const result = await fetchDeepDiveReviewsViaApi(data, page);
-        const pageReviews = result.reviews;
-
-        if (pageReviews.length === 0) {
-            stopReason = 'empty_api_page';
-            break;
-        }
-
-        let addedCount = 0;
-        for (const review of pageReviews) {
-            if (!isProUser && allReviews.length >= freeLimit) {
-                break;
-            }
-
-            if (!isDuplicateReview(review, allReviews)) {
-                allReviews.push(review);
-                addedCount += 1;
-            }
-        }
-
-        if (onProgress) {
-            onProgress(allReviews, page);
-        }
-
-        if (!isProUser && allReviews.length >= freeLimit) {
-            stopReason = 'free_limit_reached';
-            break;
-        }
-
-        if (addedCount === 0) {
-            duplicatePages += 1;
-            if (duplicatePages >= 2) {
-                stopReason = 'two_consecutive_duplicate_pages';
-                break;
-            }
-        } else {
-            duplicatePages = 0;
-        }
-
-        if (result.hasMore === false) {
-            stopReason = 'api_has_more_false';
-            break;
-        }
-
-        page += 1;
-        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
-    }
-
-    reviewFetchDebug.setContext({
-        stopReason: stopReason || (allReviews.length > 0 ? 'completed' : 'no_reviews_from_api'),
-        totalReviews: allReviews.length,
-        pagesFetched: page
-    });
-
-    if (allReviews.length > 0) {
-        return allReviews;
-    }
-
-    reviewFetchDebug.setContext({ fallback: 'dom_pagination' });
-    return fetchReviewsViaDeepDiveDom({ isProUser, freeLimit, delayMin, delayMax, onProgress });
-}
-
-const DEEP_DIVE_REVIEWS_API = 'https://www.etsy.com/api/v3/ajax/bespoke/member/neu/specs/deep_dive_reviews';
-const DEEP_DIVE_REVIEW_SCOPE = 'shopReviews';
-
-function buildDeepDiveReviewRequestBody(data, page) {
-    return {
-        log_performance_metrics: true,
-        specs: {
-            deep_dive_reviews: [
-                'Etsy\\Modules\\ListingPage\\Reviews\\DeepDive\\AsyncApiSpec',
-                {
-                    listing_id: Number(data.listingId),
-                    shop_id: Number(data.shopId),
-                    scope: DEEP_DIVE_REVIEW_SCOPE,
-                    page,
-                    sort_option: 'Relevancy',
-                    rating_filter: null,
-                    tag_filters: [],
-                    review_highlight_transaction_id: null,
-                    should_lazy_load_images: false,
-                    should_show_variations: true,
-                    photo_aesthetics_ranking_dataset_version: 'v1'
-                }
-            ]
-        },
-        runtime_analysis: false
-    };
-}
-
-function extractDeepDiveReviewHtml(payload) {
-    const root = payload?.output?.deep_dive_reviews ?? payload?.output;
-    if (!root) return '';
-
-    if (typeof root === 'string') {
-        return root;
-    }
-
-    if (typeof root === 'object') {
-        const preferredKeys = [
-            'deep_dive_reviews',
-            'html',
-            'body',
-            'content',
-            'markup',
-            'reviews',
-            'review_list',
-            'review_cards'
-        ];
-
-        for (const key of preferredKeys) {
-            const value = root[key];
-            if (typeof value === 'string' && value.trim()) {
-                return value;
-            }
-        }
-
-        for (const value of Object.values(root)) {
-            if (typeof value === 'string' && value.includes('data-review-region')) {
-                return value;
-            }
-        }
-
-        for (const value of Object.values(root)) {
-            if (value && typeof value === 'object') {
-                const nested = extractDeepDiveReviewHtml({ output: { deep_dive_reviews: value } });
-                if (nested.trim()) {
-                    return nested;
-                }
-            }
-        }
-    }
-
-    return '';
-}
-
-function extractDeepDiveHasMore(payload, reviewCount) {
-    const roots = [payload?.output?.deep_dive_reviews, payload?.output].filter(Boolean);
-
-    for (const root of roots) {
-        if (!root || typeof root !== 'object') continue;
-
-        if (root.has_more === false || root.has_more_reviews === false) {
-            return false;
-        }
-
-        if (root.has_more === true || root.has_more_reviews === true || root.has_next_page === true) {
-            return true;
-        }
-
-        if (typeof root.total_pages === 'number' && typeof root.page === 'number') {
-            return root.page < root.total_pages;
-        }
-
-        if (root.pagination && typeof root.pagination === 'object') {
-            if (root.pagination.has_more === true || root.pagination.has_next === true) {
-                return true;
-            }
-            if (typeof root.pagination.total_pages === 'number' && typeof root.pagination.page === 'number') {
-                return root.pagination.page < root.pagination.total_pages;
-            }
-        }
-    }
-
-    return reviewCount > 0 ? null : false;
-}
-
-async function fetchDeepDiveReviewsViaApi(data, page) {
-    await refreshCsrfToken(data);
-    if (!data.csrfToken) {
-        throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
-    }
-
-    const requestBody = buildDeepDiveReviewRequestBody(data, page);
-    let response;
-    let payload = null;
-
-    try {
-        response = await fetch(DEEP_DIVE_REVIEWS_API, {
-            method: 'POST',
-            headers: buildEtsyApiHeaders(data, data.listingId),
-            credentials: 'include',
-            body: JSON.stringify(requestBody)
-        });
-
-        if (response.status === 429) {
-            throw new Error('Rate limit reached. Please wait and try again.');
-        }
-
-        if (!response.ok) {
-            throw new Error(`Etsy deep dive API error: ${response.status}`);
-        }
-
-        payload = await response.json();
-    } catch (error) {
-        reviewFetchDebug.addPage({
-            page,
-            request: {
-                listing_id: requestBody.specs.deep_dive_reviews[1].listing_id,
-                shop_id: requestBody.specs.deep_dive_reviews[1].shop_id,
-                scope: requestBody.specs.deep_dive_reviews[1].scope
-            },
-            error: error.message
-        });
-        throw error;
-    }
-
-    const deepDiveRoot = payload?.output?.deep_dive_reviews;
-    const htmlString = typeof deepDiveRoot === 'string'
-        ? deepDiveRoot
-        : extractDeepDiveReviewHtml(payload);
-    const parsedDoc = htmlString?.trim()
-        ? new DOMParser().parseFromString(htmlString, 'text/html')
-        : null;
-    const reviews = parseReviewsFromHtml(htmlString);
-    const hasMore = extractDeepDiveHasMore(payload, reviews.length);
-
-    reviewFetchDebug.addPage({
-        page,
-        request: {
-            listing_id: requestBody.specs.deep_dive_reviews[1].listing_id,
-            shop_id: requestBody.specs.deep_dive_reviews[1].shop_id,
-            scope: requestBody.specs.deep_dive_reviews[1].scope
-        },
-        httpStatus: response.status,
-        deepDiveType: typeof deepDiveRoot,
-        outputKeys: Object.keys(payload?.output || {}),
-        htmlLength: htmlString?.length ?? 0,
-        htmlPreview: (htmlString?.length ?? 0) < 1000 ? htmlString : undefined,
-        reviewNodesInHtml: parsedDoc?.querySelectorAll('[data-review-region]')?.length ?? 0,
-        reviewCardsInHtml: parsedDoc?.querySelectorAll('.review-card')?.length ?? 0,
-        parsedReviewCount: reviews.length,
-        hasMore,
-        htmlEmpty: !htmlString.trim(),
-        sampleReview: reviews[0]
-            ? { reviewer: reviews[0].reviewer, rating: reviews[0].rating, textPreview: reviews[0].text?.slice(0, 80) }
-            : null
-    });
-
-    return { reviews, hasMore, htmlEmpty: !htmlString.trim() };
-}
-
-async function fetchReviewPage(data, page, preferredTab) {
-    const apiTabs = preferredTab ? [preferredTab] : ['shop_reviews', 'listing_reviews'];
-
-    for (const activeTab of apiTabs) {
-        const apiResult = await fetchReviewsViaApi(data, page, activeTab);
-        let reviews = apiResult.reviews;
-
-        if (activeTab === 'shop_reviews') {
-            reviews = filterReviewsForListing(reviews, data.listingId);
-        }
-
-        if (reviews.length > 0) {
-            console.log(`✅ Got ${reviews.length} reviews via API (${activeTab}, page ${page})`);
-            return {
-                reviews,
-                hasMore: apiResult.hasMore,
-                activeTab
-            };
-        }
-    }
-
-    if (page === 1) {
-        const htmlResult = await fetchReviewsViaListingPage(data, page);
-        if (htmlResult.reviews.length > 0) {
-            console.log(`✅ Got ${htmlResult.reviews.length} reviews via /reviews HTML page ${page}`);
-            return {
-                reviews: htmlResult.reviews,
-                hasMore: htmlResult.hasMore,
-                activeTab: preferredTab
-            };
-        }
-
-        const domReviews = parseReviewsFromDocument();
-        if (domReviews.length > 0) {
-            console.log(`✅ Got ${domReviews.length} reviews from page DOM`);
-            return {
-                reviews: domReviews,
-                hasMore: null,
-                activeTab: preferredTab
-            };
-        }
-    }
-
-    return { reviews: [], hasMore: false, activeTab: preferredTab };
-}
-
-async function fetchReviewsViaDomPagination(data, allReviews, { isProUser, freeLimit, onProgress } = {}) {
-    if (!window.location.pathname.includes('/reviews')) {
-        return allReviews;
-    }
-
     let stagnantRounds = 0;
     let round = 0;
 
@@ -1055,10 +359,6 @@ async function fetchReviewsViaDomPagination(data, allReviews, { isProUser, freeL
             }
         }
 
-        if (onProgress) {
-            onProgress(allReviews.length, round);
-        }
-
         if (addedCount === 0) {
             stagnantRounds += 1;
         } else {
@@ -1071,216 +371,15 @@ async function fetchReviewsViaDomPagination(data, allReviews, { isProUser, freeL
         }
 
         nextButton.click();
-        await sleep(1800);
+        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
     }
-
-    return allReviews;
-}
-
-async function fetchReviewsViaListingPage(data, page) {
-    const url = getListingReviewsUrl(data, page);
-    const referer = page > 1
-        ? getListingReviewsUrl(data, page - 1)
-        : (data.listingUrl || getListingReviewsUrl(data, 1));
-
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            accept: 'text/html,application/xhtml+xml',
-            'x-requested-with': 'XMLHttpRequest',
-            referer
-        },
-        credentials: 'include'
-    });
-
-    if (!response.ok) {
-        return { reviews: [], hasMore: false, htmlEmpty: true };
-    }
-
-    const html = await response.text();
-    const reviews = parseReviewsFromHtml(html);
-    const pagination = extractPaginationInfo(html, page);
 
     return {
-        reviews,
-        hasMore: pagination.hasMore ?? (reviews.length > 0 ? null : false),
-        htmlEmpty: !html.trim()
-    };
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const reviewFetchDebug = {
-    report: null,
-
-    reset() {
-        this.report = {
-            startedAt: new Date().toISOString(),
-            context: {},
-            pages: [],
-            outcome: null
-        };
-    },
-
-    setContext(context) {
-        if (this.report) {
-            this.report.context = { ...this.report.context, ...context };
-        }
-    },
-
-    addPage(pageData) {
-        if (this.report) {
-            this.report.pages.push(pageData);
-        }
-    },
-
-    finish(outcome) {
-        if (!this.report) return null;
-        this.report.finishedAt = new Date().toISOString();
-        this.report.outcome = outcome;
-        const json = JSON.stringify(this.report, null, 2);
-        console.log(
-            '\n========== ETSY REVIEW DEBUG — COPY EVERYTHING BELOW & SHARE ==========\n' +
-            json +
-            '\n========================================================================\n'
-        );
-        return this.report;
-    }
-};
-
-async function fetchReviewsFromPage({ isProUser = false, freeLimit = 50, delayMin = 1, delayMax = 3 } = {}) {
-    reviewFetchDebug.reset();
-    const data = collectEtsyData();
-
-    reviewFetchDebug.setContext({
-        url: window.location.href,
         listingId: data.listingId,
         shopId: data.shopId,
-        hasCsrf: !!data.csrfToken,
-        isProUser,
-        freeLimit,
-        delayMin,
-        delayMax,
-        shopIdSource: window.__etsy_server_data__?.shop_id ? 'etsy_server_data' : 'extracted'
-    });
-
-    if (!data.listingId || !data.shopId) {
-        reviewFetchDebug.finish({ status: 'error', error: 'Missing listing or shop ID on this page' });
-        throw new Error('Missing listing or shop ID on this page');
-    }
-
-    publishEtsyData();
-
-    const sendProgress = (reviews, page) => {
-        chrome.runtime.sendMessage({
-            type: 'reviewProgress',
-            listingId: data.listingId,
-            shopId: data.shopId,
-            page,
-            total: reviews.length,
-            reviews,
-            limitReached: !isProUser && reviews.length >= freeLimit
-        });
+        reviews: allReviews
     };
-
-    let allReviews = [];
-
-    try {
-        allReviews = await fetchReviewsViaDeepDivePanel(data, {
-            isProUser,
-            freeLimit,
-            delayMin,
-            delayMax,
-            onProgress: sendProgress
-        });
-    } catch (deepDiveError) {
-        reviewFetchDebug.setContext({ fallback: 'reviews_api', deepDiveError: deepDiveError.message });
-        console.warn('Deep dive review fetch failed, trying API fallback:', deepDiveError.message);
-
-        if (!data.csrfToken) {
-            reviewFetchDebug.finish({ status: 'error', error: deepDiveError.message });
-            throw deepDiveError;
-        }
-
-        let page = 1;
-        let preferredTab = null;
-        let duplicatePages = 0;
-        let hasMore = true;
-
-        while (hasMore) {
-            const result = await fetchReviewPage(data, page, preferredTab);
-            const pageReviews = result.reviews;
-
-            if (pageReviews.length === 0) {
-                break;
-            }
-
-            if (result.activeTab) {
-                preferredTab = result.activeTab;
-            }
-
-            let addedCount = 0;
-            for (const review of pageReviews) {
-                if (!isProUser && allReviews.length >= freeLimit) {
-                    hasMore = false;
-                    break;
-                }
-
-                if (!isDuplicateReview(review, allReviews)) {
-                    allReviews.push(review);
-                    addedCount += 1;
-                }
-            }
-
-            sendProgress(allReviews, page);
-
-            if (!hasMore || (!isProUser && allReviews.length >= freeLimit)) {
-                break;
-            }
-
-            if (addedCount === 0) {
-                duplicatePages += 1;
-                if (duplicatePages >= 2) break;
-            } else {
-                duplicatePages = 0;
-            }
-
-            if (result.hasMore === false) {
-                break;
-            }
-
-            page += 1;
-            await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
-        }
-
-        if (allReviews.length === 0) {
-            reviewFetchDebug.finish({ status: 'error', error: deepDiveError.message });
-            throw deepDiveError;
-        }
-    }
-
-    if (allReviews.length === 0) {
-        reviewFetchDebug.finish({ status: 'error', error: 'No reviews found. Open the listing Reviews section and try again.' });
-        throw new Error('No reviews found. Open the listing Reviews section and try again.');
-    }
-
-    const result = {
-        listingId: data.listingId,
-        shopId: data.shopId,
-        reviews: allReviews,
-        limitReached: !isProUser && allReviews.length >= freeLimit
-    };
-
-    reviewFetchDebug.finish({
-        status: 'success',
-        totalReviews: allReviews.length,
-        limitReached: result.limitReached
-    });
-
-    return result;
 }
-
-let activeFetchPromise = null;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'subscriptionActive') {
@@ -1297,35 +396,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return false;
     }
 
-    if (request.action === 'startReviewFetch') {
-        if (activeFetchPromise) {
-            sendResponse({ error: 'Review fetch already in progress on this tab' });
-            return false;
-        }
-
-        activeFetchPromise = fetchReviewsFromPage(request)
-            .then((result) => {
-                chrome.runtime.sendMessage({ type: 'reviewComplete', ...result });
-                sendResponse({ success: true, ...result });
-            })
-            .catch((error) => {
-                if (!reviewFetchDebug.report?.outcome) {
-                    reviewFetchDebug.finish({
-                        status: 'error',
-                        error: error.message || 'Failed to fetch reviews',
-                        stack: error.stack?.split('\n').slice(0, 3).join(' | ')
-                    });
-                }
-                chrome.runtime.sendMessage({
-                    type: 'reviewError',
-                    message: error.message || 'Failed to fetch reviews'
-                });
-                sendResponse({ error: error.message || 'Failed to fetch reviews' });
-            })
-            .finally(() => {
-                activeFetchPromise = null;
-            });
-
+    if (request.action === 'fetchReviewsDomFallback') {
+        fetchReviewsDomFallback(request)
+            .then((result) => sendResponse(result))
+            .catch((error) => sendResponse({ error: error.message || 'DOM fallback failed' }));
         return true;
     }
 
