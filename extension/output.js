@@ -51,12 +51,9 @@ async function ensureReviewsTab(tabId, tabUrl) {
 
 async function ensureContentScript(tabId) {
     try {
-        await chrome.scripting.executeScript({
-            target: { tabId },
-            files: ['content/content.js']
-        });
+        await chrome.tabs.sendMessage(tabId, { action: 'collectEtsyData' });
     } catch (error) {
-        console.log('Content script may already be loaded:', error.message);
+        console.log('Content script not reachable:', error.message);
     }
 }
 

@@ -296,17 +296,7 @@ async function requestEtsyData() {
         if (tab && tab.url && tab.url.includes('etsy.com/listing/')) {
             isOnListingPage = true;
             console.log('✅ Active tab is an Etsy listing page');
-            console.log('🔄 Triggering content script to collect fresh data...');
-
-            try {
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    files: ['content/content.js']
-                });
-                console.log('✅ Content script injected');
-            } catch (error) {
-                console.log('⚠️ Content script may already be loaded:', error.message);
-            }
+            console.log('🔄 Requesting fresh Etsy data from content script...');
 
             try {
                 await chrome.tabs.sendMessage(tab.id, { action: 'collectEtsyData' });

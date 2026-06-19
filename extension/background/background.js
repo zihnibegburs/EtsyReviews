@@ -118,19 +118,6 @@ if (chrome.tabs && chrome.tabs.onUpdated) {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         if (changeInfo.status === 'complete' && tab.url && tab.url.includes('etsy.com/listing/')) {
             console.log('🔍 Etsy listing page detected:', tab.url);
-            console.log('💉 Injecting content script...');
-
-            // Note: Content script should auto-inject via manifest
-            // This is a backup injection
-            chrome.scripting.executeScript({
-                target: { tabId: tabId },
-                files: ['content/content.js']
-            }).then(() => {
-                console.log('✅ Content script injected manually');
-            }).catch(err => {
-                // This is expected if script is already injected via manifest
-                console.log('ℹ️ Content script injection skipped:', err.message);
-            });
         }
     });
     console.log('✅ Tab update listener registered');
