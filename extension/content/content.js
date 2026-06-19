@@ -327,7 +327,10 @@ async function ensureReviewsSectionVisible() {
     await sleep(500);
 }
 
+let domFallbackAborted = false;
+
 async function fetchReviewsDomFallback({ isProUser = false, freeLimit = 50, delayMin = 1, delayMax = 3 } = {}) {
+    domFallbackAborted = false;
     const data = collectEtsyData();
     if (!data.listingId || !data.shopId) {
         throw new Error('Missing listing or shop ID on this page');
@@ -340,6 +343,10 @@ async function fetchReviewsDomFallback({ isProUser = false, freeLimit = 50, dela
     let round = 0;
 
     while (stagnantRounds < 2 && round < 200) {
+        if (domFallbackAborted) {
+            break;
+        }
+
         if (!isProUser && allReviews.length >= freeLimit) {
             break;
         }
@@ -371,13 +378,24 @@ async function fetchReviewsDomFallback({ isProUser = false, freeLimit = 50, dela
         }
 
         nextButton.click();
-        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
+        const delayMs = (delayMin + Math.random() * (delayMax - delayMin)) * 1000;
+        const step = 200;
+        let elapsed = 0;
+        while (elapsed < delayMs) {
+            if (domFallbackAborted) {
+                break;
+            }
+            const wait = Math.min(step, delayMs - elapsed);
+            await sleep(wait);
+            elapsed += wait;
+        }
     }
 
     return {
         listingId: data.listingId,
         shopId: data.shopId,
-        reviews: allReviews
+        reviews: allReviews,
+        cancelled: domFallbackAborted
     };
 }
 
@@ -393,6 +411,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             publishEtsyData();
         }
         sendResponse(data);
+        return false;
+    }
+
+    if (request.action === 'abortDomFallback') {
+        domFallbackAborted = true;
+        sendResponse({ success: true });
         return false;
     }
 

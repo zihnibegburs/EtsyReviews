@@ -6,6 +6,47 @@ const DEEP_DIVE_REVIEW_SCOPE = 'shopReviews';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function interruptibleSleep(ms, shouldAbort) {
+    const step = 200;
+    let elapsed = 0;
+    while (elapsed < ms) {
+        if (shouldAbort?.()) {
+            return true;
+        }
+        const wait = Math.min(step, ms - elapsed);
+        await sleep(wait);
+        elapsed += wait;
+    }
+    return false;
+}
+
+function abortedResult(shouldAbort, allReviews, jsDataSummary = null) {
+    if (shouldAbort?.()) {
+        return { reviews: allReviews, cancelled: true, jsDataSummary };
+    }
+    return null;
+}
+
+function extractJsDataSummary(payload) {
+    const jsData = payload?.jsData;
+    if (!jsData || typeof jsData !== 'object') {
+        return null;
+    }
+
+    const summary = {};
+    if (typeof jsData.totalReviews === 'number') {
+        summary.totalReviews = jsData.totalReviews;
+    }
+    if (typeof jsData.averageRating === 'number') {
+        summary.averageRating = jsData.averageRating;
+    }
+    if (jsData.ratingCounts && typeof jsData.ratingCounts === 'object') {
+        summary.ratingCounts = { ...jsData.ratingCounts };
+    }
+
+    return Object.keys(summary).length > 0 ? summary : null;
+}
+
 function formatReviewDate(raw) {
     const date = new Date(raw);
     if (Number.isNaN(date.getTime())) return raw;
@@ -135,11 +176,17 @@ function parseJsDataReview(entry) {
     const listingIdMatch = itemUrl.match(/\/listing\/(\d+)/);
     const transactionId = entry?.transactionId;
 
+    const photoUrl = reviewContent.appreciationPhotoUrl || null;
+    const isRecommended = reviewInfo.isRecommended;
+
     const review = {
+        transactionId: transactionId != null ? String(transactionId) : null,
         reviewId: transactionId != null ? String(transactionId) : null,
         reviewer: buyerInfo.name || 'Anonymous',
         rating: reviewInfo.rating || 0,
+        isRecommended: isRecommended === true ? true : isRecommended === false ? false : null,
         text: reviewContent.reviewText || '',
+        photoUrl,
         item: transactionData.listingTitle || '',
         itemUrl,
         listingId: listingIdMatch ? parseInt(listingIdMatch[1], 10) : null,
@@ -473,7 +520,12 @@ async function fetchDeepDiveReviewsViaApi(data, page) {
     const reviews = parseReviewsFromPayload(payload);
     const hasMore = extractHasMoreFromPayload(payload, reviews.length);
 
-    return { reviews, hasMore, htmlEmpty: reviews.length === 0 };
+    return {
+        reviews,
+        hasMore,
+        htmlEmpty: reviews.length === 0,
+        jsDataSummary: extractJsDataSummary(payload)
+    };
 }
 
 async function fetchReviewsViaApi(data, page, activeTab) {
@@ -501,7 +553,13 @@ async function fetchReviewsViaApi(data, page, activeTab) {
     const reviews = parseReviewsFromPayload(payload, activeTab);
     const hasMore = extractHasMoreFromPayload(payload, reviews.length);
 
-    return { reviews, hasMore, htmlEmpty: reviews.length === 0, activeTab };
+    return {
+        reviews,
+        hasMore,
+        htmlEmpty: reviews.length === 0,
+        activeTab,
+        jsDataSummary: extractJsDataSummary(payload)
+    };
 }
 
 async function fetchReviewsViaListingPage(data, page) {
@@ -550,7 +608,8 @@ async function fetchReviewPage(data, page, preferredTab) {
             return {
                 reviews,
                 hasMore: apiResult.hasMore,
-                activeTab
+                activeTab,
+                jsDataSummary: apiResult.jsDataSummary
             };
         }
     }
@@ -586,13 +645,24 @@ function addPageReviews(allReviews, pageReviews, { isProUser, freeLimit }) {
     return { addedCount, limitReached: !isProUser && allReviews.length >= freeLimit };
 }
 
-async function fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress }) {
+async function fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort }) {
     const allReviews = [];
     let page = 1;
     let duplicatePages = 0;
+    let jsDataSummary = null;
 
     while (page <= 500) {
+        const abortBeforeFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
+        if (abortBeforeFetch) return abortBeforeFetch;
+
         const result = await fetchDeepDiveReviewsViaApi(data, page);
+        const abortAfterFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
+        if (abortAfterFetch) return abortAfterFetch;
+
+        if (result.jsDataSummary) {
+            jsDataSummary = result.jsDataSummary;
+        }
+
         const pageReviews = result.reviews;
 
         if (pageReviews.length === 0) {
@@ -601,8 +671,11 @@ async function fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delay
 
         const { addedCount, limitReached } = addPageReviews(allReviews, pageReviews, { isProUser, freeLimit });
 
+        const abortBeforeProgress = abortedResult(shouldAbort, allReviews, jsDataSummary);
+        if (abortBeforeProgress) return abortBeforeProgress;
+
         if (onProgress) {
-            onProgress(allReviews, page);
+            onProgress(allReviews, page, jsDataSummary);
         }
 
         if (limitReached) {
@@ -623,21 +696,35 @@ async function fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delay
         }
 
         page += 1;
-        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
+        const aborted = await interruptibleSleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000, shouldAbort);
+        if (aborted) {
+            return { reviews: allReviews, cancelled: true, jsDataSummary };
+        }
     }
 
-    return allReviews;
+    return abortedResult(shouldAbort, allReviews, jsDataSummary) || { reviews: allReviews, cancelled: false, jsDataSummary };
 }
 
-async function fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress }) {
+async function fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort }) {
     const allReviews = [];
     let page = 1;
     let preferredTab = null;
     let duplicatePages = 0;
     let hasMore = true;
+    let jsDataSummary = null;
 
     while (hasMore) {
+        const abortBeforeFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
+        if (abortBeforeFetch) return abortBeforeFetch;
+
         const result = await fetchReviewPage(data, page, preferredTab);
+        const abortAfterFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
+        if (abortAfterFetch) return abortAfterFetch;
+
+        if (result.jsDataSummary) {
+            jsDataSummary = result.jsDataSummary;
+        }
+
         const pageReviews = result.reviews;
 
         if (pageReviews.length === 0) {
@@ -650,8 +737,11 @@ async function fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayM
 
         const { addedCount, limitReached } = addPageReviews(allReviews, pageReviews, { isProUser, freeLimit });
 
+        const abortBeforeProgress = abortedResult(shouldAbort, allReviews, jsDataSummary);
+        if (abortBeforeProgress) return abortBeforeProgress;
+
         if (onProgress) {
-            onProgress(allReviews, page);
+            onProgress(allReviews, page, jsDataSummary);
         }
 
         if (limitReached) {
@@ -672,20 +762,29 @@ async function fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayM
         }
 
         page += 1;
-        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
+        const aborted = await interruptibleSleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000, shouldAbort);
+        if (aborted) {
+            return { reviews: allReviews, cancelled: true, jsDataSummary };
+        }
     }
 
-    return allReviews;
+    return abortedResult(shouldAbort, allReviews, jsDataSummary) || { reviews: allReviews, cancelled: false, jsDataSummary };
 }
 
-async function fetchViaListingHtml(data, { isProUser, freeLimit, delayMin, delayMax, onProgress }) {
+async function fetchViaListingHtml(data, { isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort }) {
     const allReviews = [];
     let page = 1;
     let duplicatePages = 0;
     let hasMore = true;
 
     while (hasMore && page <= 500) {
+        const abortBeforeFetch = abortedResult(shouldAbort, allReviews);
+        if (abortBeforeFetch) return abortBeforeFetch;
+
         const result = await fetchReviewsViaListingPage(data, page);
+        const abortAfterFetch = abortedResult(shouldAbort, allReviews);
+        if (abortAfterFetch) return abortAfterFetch;
+
         const pageReviews = result.reviews;
 
         if (pageReviews.length === 0) {
@@ -694,6 +793,9 @@ async function fetchViaListingHtml(data, { isProUser, freeLimit, delayMin, delay
 
         const { addedCount, limitReached } = addPageReviews(allReviews, pageReviews, { isProUser, freeLimit });
 
+        const abortBeforeProgress = abortedResult(shouldAbort, allReviews);
+        if (abortBeforeProgress) return abortBeforeProgress;
+
         if (onProgress) {
             onProgress(allReviews, page);
         }
@@ -716,10 +818,24 @@ async function fetchViaListingHtml(data, { isProUser, freeLimit, delayMin, delay
         }
 
         page += 1;
-        await sleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000);
+        const aborted = await interruptibleSleep((delayMin + Math.random() * (delayMax - delayMin)) * 1000, shouldAbort);
+        if (aborted) {
+            return { reviews: allReviews, cancelled: true };
+        }
     }
 
-    return allReviews;
+    return abortedResult(shouldAbort, allReviews) || { reviews: allReviews, cancelled: false };
+}
+
+function buildFetchResult(data, allReviews, cancelled, isProUser, freeLimit, jsDataSummary = null) {
+    return {
+        listingId: data.listingId,
+        shopId: data.shopId,
+        reviews: allReviews,
+        limitReached: !isProUser && allReviews.length >= freeLimit,
+        cancelled,
+        jsData: jsDataSummary
+    };
 }
 
 async function fetchAllReviews(data, options = {}) {
@@ -728,38 +844,67 @@ async function fetchAllReviews(data, options = {}) {
         freeLimit = 50,
         delayMin = 1,
         delayMax = 3,
-        onProgress = null
+        onProgress = null,
+        shouldAbort = null
     } = options;
+
+    const fetchOptions = { isProUser, freeLimit, delayMin, delayMax, onProgress, shouldAbort };
 
     if (!data?.listingId || !data?.shopId) {
         throw new Error('Missing listing or shop ID. Open an Etsy listing page and try again.');
     }
 
     await refreshCsrfToken(data);
+    if (shouldAbort?.()) {
+        return buildFetchResult(data, [], true, isProUser, freeLimit);
+    }
     if (!data.csrfToken) {
         throw new Error('Could not find CSRF token. Please refresh the Etsy listing page.');
     }
 
-    let allReviews = await fetchViaDeepDiveApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress });
+    let jsDataSummary = null;
+    let result = await fetchViaDeepDiveApi(data, fetchOptions);
+    if (result.jsDataSummary) {
+        jsDataSummary = result.jsDataSummary;
+    }
+    if (result.cancelled) {
+        return buildFetchResult(data, result.reviews, true, isProUser, freeLimit, jsDataSummary);
+    }
 
-    if (allReviews.length === 0) {
-        allReviews = await fetchViaReviewsApi(data, { isProUser, freeLimit, delayMin, delayMax, onProgress });
+    let allReviews = result.reviews;
+
+    if (shouldAbort?.()) {
+        return buildFetchResult(data, allReviews, true, isProUser, freeLimit, jsDataSummary);
     }
 
     if (allReviews.length === 0) {
-        allReviews = await fetchViaListingHtml(data, { isProUser, freeLimit, delayMin, delayMax, onProgress });
+        result = await fetchViaReviewsApi(data, fetchOptions);
+        if (result.jsDataSummary) {
+            jsDataSummary = result.jsDataSummary;
+        }
+        if (result.cancelled) {
+            return buildFetchResult(data, result.reviews, true, isProUser, freeLimit, jsDataSummary);
+        }
+        allReviews = result.reviews;
+    }
+
+    if (shouldAbort?.()) {
+        return buildFetchResult(data, allReviews, true, isProUser, freeLimit, jsDataSummary);
+    }
+
+    if (allReviews.length === 0) {
+        result = await fetchViaListingHtml(data, fetchOptions);
+        if (result.cancelled) {
+            return buildFetchResult(data, result.reviews, true, isProUser, freeLimit, jsDataSummary);
+        }
+        allReviews = result.reviews;
     }
 
     if (allReviews.length === 0) {
         throw new Error('No reviews found for this listing.');
     }
 
-    return {
-        listingId: data.listingId,
-        shopId: data.shopId,
-        reviews: allReviews,
-        limitReached: !isProUser && allReviews.length >= freeLimit
-    };
+    return buildFetchResult(data, allReviews, false, isProUser, freeLimit, jsDataSummary);
 }
 
 if (typeof globalThis !== 'undefined') {

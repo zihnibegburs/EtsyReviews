@@ -29,15 +29,15 @@ body {
     width: 52px;
     height: 52px;
     margin: 0 auto 16px;
-    background: var(--color-primary-light);
-    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.logo svg {
-    fill: var(--color-primary);
+.logo img {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-lg);
 }
 
 .login-container h1 {

@@ -5,6 +5,22 @@ const FREE_USER_REVIEW_LIMIT = 50;
 let allReviews = [];
 let currentPage = 1;
 let isProUser = false;
+let isFetching = false;
+let currentTabId = null;
+let fetchFinished = false;
+let stopRequested = false;
+
+function openCheckout() {
+    chrome.tabs.create({ url: chrome.runtime.getURL('checkout.html') });
+}
+
+function updatePremiumButton() {
+    const premiumBtn = document.getElementById('premiumBtn');
+    if (!premiumBtn) return;
+    premiumBtn.style.display = isProUser ? 'none' : 'inline-block';
+}
+
+document.getElementById('premiumBtn')?.addEventListener('click', openCheckout);
 
 function getTabIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -12,30 +28,102 @@ function getTabIdFromUrl() {
     return Number.isNaN(tabId) ? null : tabId;
 }
 
+function formatRecommended(value) {
+    if (value === true) return 'Yes';
+    if (value === false) return 'No';
+    return '';
+}
+
+function formatRatingCounts(counts) {
+    if (!counts || typeof counts !== 'object') {
+        return '-';
+    }
+
+    return [5, 4, 3, 2, 1]
+        .map((star) => {
+            const count = counts[String(star)];
+            return count != null ? `${star}★ ${count}` : null;
+        })
+        .filter(Boolean)
+        .join(' · ') || '-';
+}
+
+function updateJsDataHeader(jsData) {
+    const etsyTotalEl = document.getElementById('etsyTotalReviews');
+    const averageRatingEl = document.getElementById('averageRating');
+    const ratingCountsEl = document.getElementById('ratingCounts');
+    if (!etsyTotalEl || !averageRatingEl || !ratingCountsEl) {
+        return;
+    }
+
+    if (!jsData) {
+        etsyTotalEl.textContent = '-';
+        averageRatingEl.textContent = '-';
+        ratingCountsEl.textContent = '-';
+        return;
+    }
+
+    etsyTotalEl.textContent = jsData.totalReviews != null ? String(jsData.totalReviews) : '-';
+    averageRatingEl.textContent = jsData.averageRating != null
+        ? Number(jsData.averageRating).toFixed(2)
+        : '-';
+    ratingCountsEl.textContent = formatRatingCounts(jsData.ratingCounts);
+}
+
+function buildExportContent(review) {
+    const text = review.text || '';
+    if (!review.photoUrl) {
+        return text;
+    }
+    return text ? `${text}\n[Image: ${review.photoUrl}]` : review.photoUrl;
+}
+
+function csvEscape(value) {
+    return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
 function exportReviewsToCSV() {
-    const start = (currentPage - 1) * REVIEWS_PER_PAGE;
-    const pageReviews = allReviews.slice(start, start + REVIEWS_PER_PAGE);
-    if (!pageReviews.length) {
+    if (!allReviews.length) {
         alert('No reviews!');
         return;
     }
 
     if (!isProUser && allReviews.length >= FREE_USER_REVIEW_LIMIT) {
-        const confirmed = confirm(`You are exporting ${pageReviews.length} reviews from your ${FREE_USER_REVIEW_LIMIT} review limit.\n\nUpgrade to PRO for unlimited reviews!\n\nContinue export?`);
+        const confirmed = confirm(
+            `You are exporting all ${allReviews.length} collected reviews (FREE limit: ${FREE_USER_REVIEW_LIMIT}).\n\nUpgrade to PRO for unlimited reviews!\n\nContinue export?`
+        );
         if (!confirmed) return;
     }
 
-    const rows = [['Reviewer', 'Rating', 'Date', 'Review Text', 'Item']];
-    pageReviews.forEach((review) => {
-        const esc = (value) => `"${String(value).replace(/"/g, '""')}"`;
-        rows.push([esc(review.reviewer), esc(review.rating), esc(review.date || ''), esc(review.text), esc(review.item)]);
+    const rows = [[
+        'Transaction ID',
+        'Author',
+        'Rating',
+        'Recommend',
+        'Content',
+        'Purchased Item',
+        'Date'
+    ]];
+
+    allReviews.forEach((review) => {
+        rows.push([
+            csvEscape(review.transactionId || review.reviewId || ''),
+            csvEscape(review.reviewer),
+            csvEscape(review.rating),
+            csvEscape(formatRecommended(review.isRecommended)),
+            csvEscape(buildExportContent(review)),
+            csvEscape(review.item),
+            csvEscape(review.date || '')
+        ]);
     });
 
-    const blob = new Blob([rows.map((row) => row.join(',')).join('\n')], { type: 'text/csv' });
+    const listingId = document.getElementById('displayListingId').textContent || 'listing';
+    const blob = new Blob([rows.map((row) => row.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `etsy_reviews_page${currentPage}.csv`;
+    link.download = `etsy_reviews_${listingId}_all.csv`;
     link.click();
+    URL.revokeObjectURL(link.href);
 }
 
 document.getElementById('exportCsvBtn').addEventListener('click', exportReviewsToCSV);
@@ -148,9 +236,11 @@ function showSubscriptionBanner() {
     if (!isProUser) {
         document.getElementById('upgradeLink')?.addEventListener('click', (e) => {
             e.preventDefault();
-            chrome.tabs.create({ url: chrome.runtime.getURL('checkout.html') });
+            openCheckout();
         });
     }
+
+    updatePremiumButton();
 }
 
 function showLimitBanner() {
@@ -167,37 +257,114 @@ function showLimitBanner() {
 
     document.getElementById('upgradeNowLink')?.addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: chrome.runtime.getURL('checkout.html') });
+        openCheckout();
     });
+}
+
+function hideLoading() {
+    isFetching = false;
+    document.getElementById('loading').style.display = 'none';
+}
+
+function stopFetching() {
+    if (!isFetching || stopRequested) return;
+    stopRequested = true;
+    chrome.runtime.sendMessage({ type: 'stopReviewFetch', tabId: currentTabId });
+    showStoppingState();
+}
+
+function showStoppingState() {
+    const loadingDiv = document.getElementById('loading');
+    if (!loadingDiv || loadingDiv.style.display === 'none') return;
+    loadingDiv.innerHTML = `
+        <div class="spinner"></div>
+        <p>Stopping fetch...</p>
+        <div class="loading-actions">
+            <button id="stopFetchBtn" class="btn-stop" disabled>Stopping...</button>
+        </div>
+    `;
+}
+
+function handleFetchComplete(response, cancelled = false) {
+    if (fetchFinished) return;
+    fetchFinished = true;
+    hideLoading();
+
+    if (response?.reviews) {
+        allReviews = response.reviews;
+        document.getElementById('displayListingId').textContent = response.listingId || '-';
+        document.getElementById('displayShopId').textContent = response.shopId || '-';
+        updateJsDataHeader(response.jsData);
+    }
+
+    if (cancelled) {
+        if (allReviews.length > 0) {
+            renderPage(currentPage);
+            const reviewsDiv = document.getElementById('reviews');
+            reviewsDiv.insertAdjacentHTML('afterbegin', `
+                <div class="warning" id="cancelledBanner">
+                    Fetch stopped. Showing ${allReviews.length} review${allReviews.length === 1 ? '' : 's'} collected so far.
+                </div>
+            `);
+        } else {
+            document.getElementById('reviews').innerHTML = '<div class="warning">Fetch stopped. No reviews were collected.</div>';
+        }
+        return;
+    }
+
+    if (response?.limitReached) {
+        showLimitBanner();
+    }
+
+    if (!allReviews.length) {
+        document.getElementById('reviews').innerHTML = '<div class="error">⚠️ No reviews found for this listing.</div>';
+        return;
+    }
+
+    renderPage(currentPage);
 }
 
 function updateLoading(message) {
     const loadingDiv = document.getElementById('loading');
     loadingDiv.style.display = 'block';
-    loadingDiv.innerHTML = `<div class="spinner"></div><p>${message}</p>`;
+    loadingDiv.innerHTML = `
+        <div class="spinner"></div>
+        <p>${message}</p>
+        <p class="hint">This may take a few minutes</p>
+        <div class="loading-actions">
+            <button id="stopFetchBtn" class="btn-stop">Stop Fetching</button>
+        </div>
+    `;
+    document.getElementById('stopFetchBtn')?.addEventListener('click', stopFetching);
 }
 
 chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'reviewProgress') {
+        if (stopRequested || fetchFinished) {
+            return;
+        }
         allReviews = message.reviews || [];
         document.getElementById('displayListingId').textContent = message.listingId;
         document.getElementById('displayShopId').textContent = message.shopId;
         document.getElementById('totalReviews').textContent = allReviews.length;
-        updateLoading(`Fetching reviews... page ${message.page} (${allReviews.length} collected)`);
-        renderPage(currentPage);
-    }
-
-    if (message.type === 'reviewComplete') {
-        allReviews = message.reviews || [];
-        document.getElementById('loading').style.display = 'none';
-        if (message.limitReached) {
-            showLimitBanner();
+        updateJsDataHeader(message.jsData);
+        const loadingMessage = document.querySelector('#loading > p');
+        if (loadingMessage) {
+            loadingMessage.textContent = `Fetching reviews... page ${message.page} (${allReviews.length} collected)`;
         }
         renderPage(currentPage);
     }
 
+    if (message.type === 'reviewComplete') {
+        handleFetchComplete(message);
+    }
+
+    if (message.type === 'reviewCancelled') {
+        handleFetchComplete(message, true);
+    }
+
     if (message.type === 'reviewError') {
-        document.getElementById('loading').style.display = 'none';
+        hideLoading();
         document.getElementById('reviews').innerHTML = `<div class="error">⚠️ ${message.message}</div>`;
     }
 });
@@ -205,6 +372,7 @@ chrome.runtime.onMessage.addListener((message) => {
 document.addEventListener('DOMContentLoaded', async () => {
     const reviewsDiv = document.getElementById('reviews');
     const tabId = getTabIdFromUrl();
+    currentTabId = tabId;
 
     if (!tabId) {
         reviewsDiv.innerHTML = '<div class="error">⚠️ Open reviews from an Etsy listing tab using the extension popup.</div>';
@@ -236,6 +404,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     showSubscriptionBanner();
+    isFetching = true;
+    stopRequested = false;
+    fetchFinished = false;
     updateLoading('Fetching reviews from Etsy...');
 
     const delayConfig = await new Promise((resolve) => {
@@ -256,30 +427,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         delayMax: delayConfig.max
     }, (response) => {
         if (chrome.runtime.lastError) {
-            document.getElementById('loading').style.display = 'none';
+            hideLoading();
             reviewsDiv.innerHTML = '<div class="error">⚠️ Could not start review fetch. Reload the extension and try again.</div>';
             return;
         }
 
         if (response?.error) {
-            document.getElementById('loading').style.display = 'none';
+            hideLoading();
             reviewsDiv.innerHTML = `<div class="error">⚠️ ${response.error}</div>`;
             return;
         }
 
         if (response?.reviews) {
-            allReviews = response.reviews;
-            document.getElementById('displayListingId').textContent = response.listingId;
-            document.getElementById('displayShopId').textContent = response.shopId;
-            document.getElementById('loading').style.display = 'none';
-            if (response.limitReached) {
-                showLimitBanner();
-            }
-            if (allReviews.length === 0) {
-                reviewsDiv.innerHTML = '<div class="error">⚠️ No reviews found for this listing.</div>';
-                return;
-            }
-            renderPage(currentPage);
+            handleFetchComplete(response, !!response.cancelled);
         }
     });
 });

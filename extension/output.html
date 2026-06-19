@@ -61,6 +61,12 @@
             font-variant-numeric: tabular-nums;
         }
 
+        .info-value.compact {
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
         .controls {
             background: var(--color-surface);
             padding: 16px 20px;
@@ -103,6 +109,35 @@
             background: var(--color-border);
             color: var(--color-text-muted);
             cursor: not-allowed;
+        }
+
+        .btn-stop {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-stop:hover {
+            background: #c0392b;
+        }
+
+        .btn-premium {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-premium:hover {
+            opacity: 0.92;
+        }
+
+        .controls-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        #loading .loading-actions {
+            margin-top: 20px;
         }
 
         #loading {
@@ -258,12 +293,27 @@
                     <span class="info-label">Shop ID</span>
                     <span class="info-value" id="displayShopId">-</span>
                 </div>
+                <div class="info-item">
+                    <span class="info-label">Etsy Total Reviews</span>
+                    <span class="info-value" id="etsyTotalReviews">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Average Rating</span>
+                    <span class="info-value" id="averageRating">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Rating Counts</span>
+                    <span class="info-value compact" id="ratingCounts">-</span>
+                </div>
             </div>
         </div>
 
         <div class="controls">
-            <span class="controls-meta">10 reviews per page</span>
-            <button id="exportCsvBtn" class="btn-export" disabled>Export to CSV</button>
+            <span class="controls-meta">10 reviews per page · Export includes all collected reviews</span>
+            <div class="controls-actions">
+                <button id="premiumBtn" class="btn-premium" style="display: none;">Get Premium Subscription</button>
+                <button id="exportCsvBtn" class="btn-export" disabled>Export All to CSV</button>
+            </div>
         </div>
 
         <div id="loading">

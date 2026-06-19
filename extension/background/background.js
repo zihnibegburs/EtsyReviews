@@ -6,6 +6,10 @@ console.log('🔗 API:', API_CONFIG.BASE_URL);
 
 let etsyData = null;
 let activeFetchPromise = null;
+let fetchAborted = false;
+let activeFetchTabId = null;
+let lastProgressReviews = [];
+let lastJsDataSummary = null;
 
 function broadcastReviewMessage(message) {
     chrome.runtime.sendMessage(message).catch(() => {
@@ -52,7 +56,7 @@ async function resolveEtsyData(tabId) {
 }
 
 async function tryDomFallback(tabId, options) {
-    if (!tabId) {
+    if (!tabId || fetchAborted) {
         return null;
     }
 
@@ -61,7 +65,7 @@ async function tryDomFallback(tabId, options) {
             action: 'fetchReviewsDomFallback',
             ...options
         });
-        if (response?.reviews?.length) {
+        if (response?.cancelled || response?.reviews?.length) {
             return response;
         }
     } catch (error) {
@@ -72,12 +76,26 @@ async function tryDomFallback(tabId, options) {
 }
 
 async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax }) {
+    fetchAborted = false;
+    lastProgressReviews = [];
+    lastJsDataSummary = null;
+    activeFetchTabId = tabId;
+
     const data = await resolveEtsyData(tabId);
     if (!data) {
         throw new Error('Missing listing or shop ID. Refresh the Etsy listing page and try again.');
     }
 
-    const onProgress = (reviews, page) => {
+    const shouldAbort = () => fetchAborted;
+
+    const onProgress = (reviews, page, jsDataSummary) => {
+        if (fetchAborted) {
+            return;
+        }
+        lastProgressReviews = reviews;
+        if (jsDataSummary) {
+            lastJsDataSummary = jsDataSummary;
+        }
         broadcastReviewMessage({
             type: 'reviewProgress',
             listingId: data.listingId,
@@ -85,7 +103,8 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
             page,
             total: reviews.length,
             reviews,
-            limitReached: !isProUser && reviews.length >= freeLimit
+            limitReached: !isProUser && reviews.length >= freeLimit,
+            jsData: jsDataSummary || lastJsDataSummary
         });
     };
 
@@ -95,12 +114,30 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
             freeLimit,
             delayMin,
             delayMax,
-            onProgress
+            onProgress,
+            shouldAbort
         });
 
-        broadcastReviewMessage({ type: 'reviewComplete', ...result });
+        if (result.cancelled) {
+            broadcastReviewMessage({ type: 'reviewCancelled', ...result });
+        } else {
+            broadcastReviewMessage({ type: 'reviewComplete', ...result });
+        }
         return result;
     } catch (apiError) {
+        if (fetchAborted) {
+            const result = {
+                listingId: data.listingId,
+                shopId: data.shopId,
+                reviews: lastProgressReviews,
+                limitReached: !isProUser && lastProgressReviews.length >= freeLimit,
+                cancelled: true,
+                jsData: lastJsDataSummary
+            };
+            broadcastReviewMessage({ type: 'reviewCancelled', ...result });
+            return result;
+        }
+
         console.warn('API fetch failed, trying DOM fallback:', apiError.message);
 
         const domResult = await tryDomFallback(tabId, {
@@ -109,6 +146,18 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
             delayMin,
             delayMax
         });
+
+        if (domResult?.cancelled) {
+            const result = {
+                listingId: domResult.listingId || data.listingId,
+                shopId: domResult.shopId || data.shopId,
+                reviews: domResult.reviews || [],
+                limitReached: !isProUser && (domResult.reviews?.length || 0) >= freeLimit,
+                cancelled: true
+            };
+            broadcastReviewMessage({ type: 'reviewCancelled', ...result });
+            return result;
+        }
 
         if (domResult?.reviews?.length) {
             const result = {
@@ -126,6 +175,8 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
             message: apiError.message || 'Failed to fetch reviews'
         });
         throw apiError;
+    } finally {
+        activeFetchTabId = null;
     }
 }
 
@@ -158,6 +209,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             hasCsrf: !!etsyData.csrfToken
         } : 'null');
         sendResponse(etsyData);
+        return false;
+    }
+
+    if (msg.type === 'stopReviewFetch') {
+        fetchAborted = true;
+        if (activeFetchTabId) {
+            chrome.tabs.sendMessage(activeFetchTabId, { action: 'abortDomFallback' }).catch(() => {});
+        }
+        sendResponse({ success: true });
         return false;
     }
 
