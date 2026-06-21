@@ -92,6 +92,86 @@
             line-height: 1.4;
         }
 
+        .info-item-ratings {
+            flex: 1 1 100%;
+            min-width: 280px;
+        }
+
+        .rating-counts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .rating-counts.is-empty {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-top: 4px;
+        }
+
+        .rating-count-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            min-width: 72px;
+            padding: 10px 14px;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-md);
+        }
+
+        .rating-count-stars {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+
+        .rating-count-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--color-text);
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+
+        .rating-count-label {
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .export-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .export-format-select {
+            padding: 10px 12px;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--color-text);
+            background: var(--color-surface);
+            cursor: pointer;
+        }
+
+        .export-format-select:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 2px var(--color-primary-muted);
+        }
+
         .btn-export {
             background: var(--color-primary);
             color: white;
@@ -309,7 +389,13 @@
                 <h1>Etsy Reviews Export</h1>
                 <div class="header-actions">
                     <button id="premiumBtn" class="btn-premium" style="display: none;">Get Premium Subscription</button>
-                    <button id="exportCsvBtn" class="btn-export" disabled>Export All to CSV</button>
+                    <div class="export-controls">
+                        <select id="exportFormat" class="export-format-select" aria-label="Export format">
+                            <option value="csv">CSV</option>
+                            <option value="xlsx">XLSX</option>
+                        </select>
+                        <button id="exportBtn" class="btn-export" disabled>Export All</button>
+                    </div>
                 </div>
             </div>
             <div class="header-info">
@@ -329,9 +415,9 @@
                     <span class="info-label">Average Rating</span>
                     <span class="info-value" id="averageRating">-</span>
                 </div>
-                <div class="info-item">
-                    <span class="info-label">Rating Counts</span>
-                    <span class="info-value compact" id="ratingCounts">-</span>
+                <div class="info-item info-item-ratings">
+                    <span class="info-label">Rating Breakdown</span>
+                    <div class="rating-counts is-empty" id="ratingCounts">-</div>
                 </div>
             </div>
         </div>
@@ -350,6 +436,7 @@
         <div id="pagination-controls"></div>
     </div>
 
+    <script src="vendor/xlsx.mini.min.js"></script>
     <script src="utils/config.js"></script>
     <script src="output.js"></script>
 </body>

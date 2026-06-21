@@ -29,6 +29,7 @@ const pageSettings = document.getElementById('pageSettings');
 const buyMonthly = document.getElementById('buyMonthly');
 const buyYearly = document.getElementById('buyYearly');
 const currentPlan = document.getElementById('currentPlan');
+const currentPlanExpiry = document.getElementById('currentPlanExpiry');
 
 // Settings Page Elements
 const minDelayInput = document.getElementById('minDelay');
@@ -535,7 +536,11 @@ async function loadPurchasePageData() {
 
     try {
         const subscription = await API.getSubscription();
-        const hasActive = subscription && subscription.status === 'ACTIVE';
+        const hasActive = subscription?.status === 'ACTIVE'
+            || subscription?.status === 'TRIAL'
+            || subscription?.status === 'PAST_DUE';
+        const isPendingCancel = hasActive && !!subscription?.cancelledAt;
+        const periodEnd = formatSubscriptionDate(subscription?.currentPeriodEnd);
 
         if (hasActive) {
             currentPlan.textContent = 'PRO';
@@ -544,6 +549,16 @@ async function loadPurchasePageData() {
             buyYearly.disabled = true;
             buyMonthly.textContent = 'Current Plan';
             buyYearly.textContent = 'Current Plan';
+
+            if (periodEnd) {
+                currentPlanExpiry.textContent = isPendingCancel
+                    ? `Ends on ${periodEnd}`
+                    : `Renews on ${periodEnd}`;
+                currentPlanExpiry.classList.remove('hidden');
+            } else {
+                currentPlanExpiry.textContent = '';
+                currentPlanExpiry.classList.add('hidden');
+            }
         } else {
             currentPlan.textContent = 'FREE';
             currentPlan.className = 'status-badge inactive';
@@ -551,6 +566,8 @@ async function loadPurchasePageData() {
             buyYearly.disabled = false;
             buyMonthly.textContent = 'Get Monthly';
             buyYearly.textContent = 'Get Yearly';
+            currentPlanExpiry.textContent = '';
+            currentPlanExpiry.classList.add('hidden');
         }
     } catch (error) {
         console.error('❌ Failed to load purchase page data:', error);
@@ -560,6 +577,8 @@ async function loadPurchasePageData() {
         buyYearly.disabled = false;
         buyMonthly.textContent = 'Get Monthly';
         buyYearly.textContent = 'Get Yearly';
+        currentPlanExpiry.textContent = '';
+        currentPlanExpiry.classList.add('hidden');
     }
 }
 

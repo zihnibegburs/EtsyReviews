@@ -39,7 +39,6 @@ public class StripeController {
     }
 
     @GetMapping("/config")
-    @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Get Stripe public config for extension checkout")
     public ResponseEntity<Map<String, String>> getConfig() {
         Map<String, String> config = new HashMap<>();

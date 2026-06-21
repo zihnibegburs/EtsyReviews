@@ -48,18 +48,48 @@ function formatRecommended(value) {
     return '';
 }
 
-function formatRatingCounts(counts) {
-    if (!counts || typeof counts !== 'object') {
-        return '-';
+function formatRatingCountValue(count) {
+    return Number(count).toLocaleString();
+}
+
+function renderRatingCounts(counts) {
+    const ratingCountsEl = document.getElementById('ratingCounts');
+    if (!ratingCountsEl) {
+        return;
     }
 
-    return [5, 4, 3, 2, 1]
+    if (!counts || typeof counts !== 'object') {
+        ratingCountsEl.className = 'rating-counts is-empty';
+        ratingCountsEl.textContent = '-';
+        return;
+    }
+
+    const items = [5, 4, 3, 2, 1]
         .map((star) => {
             const count = counts[String(star)];
-            return count != null ? `${star}★ ${count}` : null;
+            if (count == null) {
+                return null;
+            }
+
+            return `
+                <div class="rating-count-item">
+                    <span class="rating-count-stars">${star} stars</span>
+                    <span class="rating-count-value">${formatRatingCountValue(count)}</span>
+                    <span class="rating-count-label">reviews</span>
+                </div>
+            `;
         })
         .filter(Boolean)
-        .join(' · ') || '-';
+        .join('');
+
+    if (!items) {
+        ratingCountsEl.className = 'rating-counts is-empty';
+        ratingCountsEl.textContent = '-';
+        return;
+    }
+
+    ratingCountsEl.className = 'rating-counts';
+    ratingCountsEl.innerHTML = items;
 }
 
 function updateJsDataHeader(jsData) {
@@ -73,6 +103,7 @@ function updateJsDataHeader(jsData) {
     if (!jsData) {
         etsyTotalEl.textContent = '-';
         averageRatingEl.textContent = '-';
+        ratingCountsEl.className = 'rating-counts is-empty';
         ratingCountsEl.textContent = '-';
         return;
     }
@@ -81,7 +112,7 @@ function updateJsDataHeader(jsData) {
     averageRatingEl.textContent = jsData.averageRating != null
         ? Number(jsData.averageRating).toFixed(2)
         : '-';
-    ratingCountsEl.textContent = formatRatingCounts(jsData.ratingCounts);
+    renderRatingCounts(jsData.ratingCounts);
 }
 
 function buildExportContent(review) {
@@ -92,57 +123,111 @@ function buildExportContent(review) {
     return text ? `${text}\n[Image: ${review.photoUrl}]` : review.photoUrl;
 }
 
+const EXPORT_HEADERS = [
+    '#',
+    'Transaction ID',
+    'Author',
+    'Rating',
+    'Recommend',
+    'Content',
+    'Purchased Item',
+    'Date'
+];
+
+function buildExportRows() {
+    const rows = [EXPORT_HEADERS];
+
+    allReviews.forEach((review, index) => {
+        rows.push([
+            index + 1,
+            review.transactionId || review.reviewId || '',
+            review.reviewer || '',
+            review.rating ?? '',
+            formatRecommended(review.isRecommended),
+            buildExportContent(review),
+            review.item || '',
+            review.date || ''
+        ]);
+    });
+
+    return rows;
+}
+
+function getExportFilename(extension) {
+    const listingId = document.getElementById('displayListingId').textContent || 'listing';
+    return `etsy_reviews_${listingId}_all.${extension}`;
+}
+
+function confirmFreeUserExport() {
+    if (isProUser || allReviews.length < FREE_USER_REVIEW_LIMIT) {
+        return true;
+    }
+
+    return confirm(
+        `You are exporting all ${allReviews.length} collected reviews (FREE limit: ${FREE_USER_REVIEW_LIMIT}).\n\nUpgrade to PRO for unlimited reviews!\n\nContinue export?`
+    );
+}
+
+function downloadBlob(blob, filename) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
 function csvEscape(value) {
     return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
 function exportReviewsToCSV() {
+    const rows = buildExportRows();
+    const csvContent = rows
+        .map((row) => row.map((cell) => csvEscape(cell)).join(','))
+        .join('\n');
+
+    downloadBlob(
+        new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }),
+        getExportFilename('csv')
+    );
+}
+
+function exportReviewsToXLSX() {
+    if (typeof XLSX === 'undefined') {
+        throw new Error('XLSX library failed to load');
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(buildExportRows());
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Reviews');
+    XLSX.writeFile(workbook, getExportFilename('xlsx'));
+}
+
+function exportReviews() {
     if (!allReviews.length) {
         alert('No reviews!');
         return;
     }
 
-    if (!isProUser && allReviews.length >= FREE_USER_REVIEW_LIMIT) {
-        const confirmed = confirm(
-            `You are exporting all ${allReviews.length} collected reviews (FREE limit: ${FREE_USER_REVIEW_LIMIT}).\n\nUpgrade to PRO for unlimited reviews!\n\nContinue export?`
-        );
-        if (!confirmed) return;
+    if (!confirmFreeUserExport()) {
+        return;
     }
 
-    const rows = [[
-        '#',
-        'Transaction ID',
-        'Author',
-        'Rating',
-        'Recommend',
-        'Content',
-        'Purchased Item',
-        'Date'
-    ]];
+    const format = document.getElementById('exportFormat')?.value || 'csv';
 
-    allReviews.forEach((review, index) => {
-        rows.push([
-            csvEscape(index + 1),
-            csvEscape(review.transactionId || review.reviewId || ''),
-            csvEscape(review.reviewer),
-            csvEscape(review.rating),
-            csvEscape(formatRecommended(review.isRecommended)),
-            csvEscape(buildExportContent(review)),
-            csvEscape(review.item),
-            csvEscape(review.date || '')
-        ]);
-    });
-
-    const listingId = document.getElementById('displayListingId').textContent || 'listing';
-    const blob = new Blob([rows.map((row) => row.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `etsy_reviews_${listingId}_all.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    try {
+        if (format === 'xlsx') {
+            exportReviewsToXLSX();
+        } else {
+            exportReviewsToCSV();
+        }
+    } catch (error) {
+        console.error('Export failed:', error);
+        alert(`Export failed: ${error.message}`);
+    }
 }
 
-document.getElementById('exportCsvBtn').addEventListener('click', exportReviewsToCSV);
+document.getElementById('exportBtn').addEventListener('click', exportReviews);
 
 function renderPage(page = 1) {
     const reviewsDiv = document.getElementById('reviews');
@@ -193,7 +278,7 @@ function renderPage(page = 1) {
     reviewsDiv.innerHTML = tableHtml;
     renderPaginationControls(page);
     updateLoadingTotalReviews(allReviews.length);
-    document.getElementById('exportCsvBtn').disabled = false;
+    document.getElementById('exportBtn').disabled = false;
 }
 
 function renderPaginationControls(page) {

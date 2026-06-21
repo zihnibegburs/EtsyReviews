@@ -37,6 +37,7 @@ public class SecurityConfig {
                                 "/",
                                 "/health",
                                 "/api/auth/**",
+                                "/api/stripe/config",
                                 "/api/stripe/webhook",
                                 "/checkout/success",
                                 "/checkout/cancel",

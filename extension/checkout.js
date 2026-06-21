@@ -13,22 +13,71 @@ const StorageManager = {
 
 let stripeConfig = null;
 
+function showCheckoutError(message) {
+    const errorEl = document.getElementById('checkoutError');
+    if (!errorEl) {
+        alert(message);
+        return;
+    }
+
+    errorEl.textContent = message;
+    errorEl.classList.remove('hidden');
+}
+
+function clearCheckoutError() {
+    const errorEl = document.getElementById('checkoutError');
+    if (!errorEl) return;
+    errorEl.textContent = '';
+    errorEl.classList.add('hidden');
+}
+
+function getLocalStripeConfig() {
+    if (API_CONFIG.STRIPE_PRICE_ID_MONTHLY && API_CONFIG.STRIPE_PRICE_ID_YEARLY) {
+        return {
+            priceIdMonthly: API_CONFIG.STRIPE_PRICE_ID_MONTHLY,
+            priceIdYearly: API_CONFIG.STRIPE_PRICE_ID_YEARLY
+        };
+    }
+    return null;
+}
+
+async function fetchStripeConfigFromApi() {
+    const token = await StorageManager.getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}/stripe/config`, { headers });
+    if (!response.ok) {
+        return null;
+    }
+
+    const data = await response.json();
+    if (!data?.priceIdMonthly || !data?.priceIdYearly) {
+        return null;
+    }
+
+    return data;
+}
+
 async function loadStripeConfig() {
     if (stripeConfig) return stripeConfig;
 
-    const token = await StorageManager.getToken();
-    if (!token) throw new Error('Please login first');
-
-    const response = await fetch(`${API_CONFIG.BASE_URL}/stripe/config`, {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to load Stripe config');
+    try {
+        const remoteConfig = await fetchStripeConfigFromApi();
+        if (remoteConfig) {
+            stripeConfig = remoteConfig;
+            return stripeConfig;
+        }
+    } catch (error) {
+        console.warn('Stripe config API unavailable:', error.message);
     }
 
-    stripeConfig = await response.json();
-    return stripeConfig;
+    const localConfig = getLocalStripeConfig();
+    if (localConfig) {
+        stripeConfig = localConfig;
+        return stripeConfig;
+    }
+
+    throw new Error('Failed to load Stripe config. Please try again later.');
 }
 
 async function loadStatus() {
@@ -44,8 +93,6 @@ async function loadStatus() {
         });
 
         const statusEl = document.getElementById('currentStatus');
-        const monthlyBtn = document.getElementById('monthlyBtn');
-        const yearlyBtn = document.getElementById('yearlyBtn');
 
         if (response.ok) {
             const subscription = await response.json();
@@ -88,13 +135,13 @@ function setCheckoutButtonsDisabled(disabled, label = null) {
 
 async function openStripeCheckout(priceId) {
     const loadingDiv = document.getElementById('loadingMessage');
-    loadingDiv.style.display = 'block';
+    loadingDiv.classList.remove('hidden');
+    clearCheckoutError();
 
     try {
         const token = await StorageManager.getToken();
         if (!token) {
-            alert('Please login first to continue with checkout.');
-            return;
+            throw new Error('Please login in the extension first, then try again.');
         }
 
         const response = await fetch(`${API_CONFIG.BASE_URL}/stripe/checkout`, {
@@ -108,36 +155,70 @@ async function openStripeCheckout(priceId) {
 
         const data = await response.json();
         if (response.status === 409) {
-            alert(data.error || 'You already have an active subscription.');
-            await loadStatus();
-            return;
+            throw new Error(data.error || 'You already have an active subscription.');
         }
         if (!response.ok) {
-            throw new Error(data.error || 'Checkout failed');
+            throw new Error(data.error || `Checkout failed (HTTP ${response.status})`);
+        }
+        if (!data.checkoutUrl) {
+            throw new Error('Checkout URL missing from server response');
         }
 
         chrome.tabs.create({ url: data.checkoutUrl });
-    } catch (error) {
-        console.error('Checkout error:', error);
-        alert('Failed to open checkout: ' + error.message);
     } finally {
-        loadingDiv.style.display = 'none';
+        loadingDiv.classList.add('hidden');
     }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadStatus();
+async function startCheckout(plan) {
+    const monthlyBtn = document.getElementById('monthlyBtn');
+    const yearlyBtn = document.getElementById('yearlyBtn');
+    const activeBtn = plan === 'yearly' ? yearlyBtn : monthlyBtn;
+
+    if (activeBtn.disabled) {
+        return;
+    }
+
+    const originalLabel = activeBtn.textContent;
+    clearCheckoutError();
+    monthlyBtn.disabled = true;
+    yearlyBtn.disabled = true;
+    activeBtn.textContent = 'Opening checkout...';
 
     try {
         const config = await loadStripeConfig();
-        document.getElementById('monthlyBtn').addEventListener('click', () => {
-            openStripeCheckout(config.priceIdMonthly);
-        });
-        document.getElementById('yearlyBtn').addEventListener('click', () => {
-            openStripeCheckout(config.priceIdYearly);
-        });
+        const priceId = plan === 'yearly' ? config.priceIdYearly : config.priceIdMonthly;
+        await openStripeCheckout(priceId);
     } catch (error) {
-        console.warn('Stripe config not loaded:', error.message);
+        console.error('Checkout error:', error);
+        showCheckoutError(error.message || 'Failed to open checkout');
+    } finally {
+        if (activeBtn.textContent === 'Opening checkout...') {
+            activeBtn.textContent = originalLabel;
+        }
+        await loadStatus();
+    }
+}
+
+function setupCheckoutButtons() {
+    document.getElementById('monthlyBtn').addEventListener('click', () => {
+        startCheckout('monthly');
+    });
+    document.getElementById('yearlyBtn').addEventListener('click', () => {
+        startCheckout('yearly');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    setupCheckoutButtons();
+    await loadStatus();
+
+    try {
+        await loadStripeConfig();
+        clearCheckoutError();
+    } catch (error) {
+        console.warn('Stripe config preload failed:', error.message);
+        showCheckoutError('Could not load billing config. Click a plan to retry.');
     }
 
     document.getElementById('backLink').addEventListener('click', (e) => {
