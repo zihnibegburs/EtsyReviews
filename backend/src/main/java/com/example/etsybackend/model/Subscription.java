@@ -30,6 +30,7 @@ public class Subscription {
     private LocalDateTime currentPeriodStart;
     private LocalDateTime currentPeriodEnd;
     private LocalDateTime cancelledAt;
+    private Boolean cancelAtPeriodEnd = false;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

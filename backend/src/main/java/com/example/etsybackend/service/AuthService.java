@@ -77,6 +77,8 @@ public class AuthService {
             subDTO.setPlanId(sub.getPlanId());
             subDTO.setStatus(sub.getStatus());
             subDTO.setCurrentPeriodEnd(sub.getCurrentPeriodEnd());
+            subDTO.setCancelledAt(sub.getCancelledAt());
+            subDTO.setCancelAtPeriodEnd(sub.getCancelAtPeriodEnd());
             dto.setSubscription(subDTO);
         }
 

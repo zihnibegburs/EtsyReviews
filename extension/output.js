@@ -558,7 +558,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (response.ok) {
                 const subscription = await response.json();
-                isProUser = subscription?.status === 'ACTIVE';
+                isProUser = SubscriptionHelper.hasProAccess(subscription);
             }
         }
     } catch (error) {

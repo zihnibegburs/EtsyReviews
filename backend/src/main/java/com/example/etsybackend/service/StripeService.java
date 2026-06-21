@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class StripeService {
@@ -44,6 +45,12 @@ public class StripeService {
 
     @Value("${stripe.cancel-url}")
     private String cancelUrl;
+
+    @Value("${stripe.price-id-monthly}")
+    private String priceIdMonthly;
+
+    @Value("${stripe.price-id-yearly}")
+    private String priceIdYearly;
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
@@ -90,6 +97,7 @@ public class StripeService {
         );
 
         if (Boolean.TRUE.equals(stripeSubscription.getCancelAtPeriodEnd())) {
+            subscription.setCancelAtPeriodEnd(true);
             subscription.setCancelledAt(LocalDateTime.now());
             subscriptionRepository.save(subscription);
             return subscription;
@@ -104,6 +112,102 @@ public class StripeService {
         subscription.setCancelledAt(LocalDateTime.now());
         subscriptionRepository.save(subscription);
         log.info("Subscription scheduled for cancellation for user {}", userId);
+        return subscription;
+    }
+
+    public Subscription reactivateSubscription(Long userId) throws StripeException {
+        Subscription subscription = subscriptionRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("No subscription found"));
+
+        if (subscription.getStripeSubscriptionId() == null) {
+            throw new RuntimeException("No Stripe subscription found");
+        }
+
+        com.stripe.model.Subscription stripeSubscription = com.stripe.model.Subscription.retrieve(
+                subscription.getStripeSubscriptionId()
+        );
+
+        if (!Boolean.TRUE.equals(stripeSubscription.getCancelAtPeriodEnd())) {
+            throw new RuntimeException("Subscription is not scheduled for cancellation");
+        }
+
+        if (!isBlockingStripeSubscription(stripeSubscription)) {
+            throw new RuntimeException("Subscription cannot be reactivated");
+        }
+
+        SubscriptionUpdateParams params = SubscriptionUpdateParams.builder()
+                .setCancelAtPeriodEnd(false)
+                .build();
+
+        stripeSubscription = stripeSubscription.update(params);
+        applyStripeSubscription(subscription, stripeSubscription);
+        subscription.setCancelledAt(null);
+        subscription.setCancelAtPeriodEnd(false);
+        subscriptionRepository.save(subscription);
+        log.info("Subscription reactivated for user {}", userId);
+        return subscription;
+    }
+
+    public Subscription upgradeSubscription(Long userId, String targetPriceId) throws StripeException {
+        if (!priceIdYearly.equals(targetPriceId)) {
+            throw new RuntimeException("Only upgrade to yearly plan is supported");
+        }
+
+        Subscription subscription = subscriptionRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("No subscription found"));
+
+        if (subscription.getStripeSubscriptionId() == null) {
+            throw new RuntimeException("No Stripe subscription found");
+        }
+
+        if (Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd()) || subscription.getCancelledAt() != null) {
+            throw new RuntimeException("Reactivate your subscription before upgrading");
+        }
+
+        if (!isBlockingStatus(subscription.getStatus())) {
+            throw new RuntimeException("No active subscription to upgrade");
+        }
+
+        com.stripe.model.Subscription stripeSubscription = com.stripe.model.Subscription.retrieve(
+                subscription.getStripeSubscriptionId()
+        );
+
+        if (!isBlockingStripeSubscription(stripeSubscription)
+                || Boolean.TRUE.equals(stripeSubscription.getCancelAtPeriodEnd())) {
+            throw new RuntimeException("No active subscription to upgrade");
+        }
+
+        String currentPriceId = extractPlanId(stripeSubscription);
+        if (targetPriceId.equals(currentPriceId)) {
+            throw new RuntimeException("You are already on this plan");
+        }
+
+        if (!priceIdMonthly.equals(currentPriceId)) {
+            throw new RuntimeException("Upgrade is only available from monthly to yearly");
+        }
+
+        if (stripeSubscription.getItems() == null
+                || stripeSubscription.getItems().getData() == null
+                || stripeSubscription.getItems().getData().isEmpty()) {
+            throw new RuntimeException("Subscription has no items to upgrade");
+        }
+
+        String subscriptionItemId = stripeSubscription.getItems().getData().get(0).getId();
+
+        SubscriptionUpdateParams params = SubscriptionUpdateParams.builder()
+                .addItem(
+                        SubscriptionUpdateParams.Item.builder()
+                                .setId(subscriptionItemId)
+                                .setPrice(targetPriceId)
+                                .build()
+                )
+                .setProrationBehavior(SubscriptionUpdateParams.ProrationBehavior.CREATE_PRORATIONS)
+                .build();
+
+        stripeSubscription = stripeSubscription.update(params);
+        applyStripeSubscription(subscription, stripeSubscription);
+        subscriptionRepository.save(subscription);
+        log.info("Subscription upgraded to yearly for user {}", userId);
         return subscription;
     }
 
@@ -133,14 +237,41 @@ public class StripeService {
         return Session.create(paramsBuilder.build());
     }
 
-    private void ensureNoActiveSubscription(Long userId) {
-        subscriptionRepository.findByUserId(userId).ifPresent(subscription -> {
-            if (subscription.getStatus() == SubscriptionStatus.ACTIVE
-                    || subscription.getStatus() == SubscriptionStatus.TRIAL
-                    || subscription.getStatus() == SubscriptionStatus.PAST_DUE) {
-                throw new ActiveSubscriptionException("You already have an active subscription");
-            }
-        });
+    private void ensureNoActiveSubscription(Long userId) throws StripeException {
+        Optional<Subscription> subscriptionOpt = subscriptionRepository.findByUserId(userId);
+        if (subscriptionOpt.isEmpty()) {
+            return;
+        }
+
+        Subscription subscription = subscriptionOpt.get();
+        if (isBlockingStatus(subscription.getStatus())) {
+            throw new ActiveSubscriptionException("You already have an active subscription");
+        }
+
+        if (subscription.getStripeSubscriptionId() == null) {
+            return;
+        }
+
+        com.stripe.model.Subscription stripeSubscription = com.stripe.model.Subscription.retrieve(
+                subscription.getStripeSubscriptionId()
+        );
+        if (isBlockingStripeSubscription(stripeSubscription)) {
+            throw new ActiveSubscriptionException("You already have an active subscription");
+        }
+    }
+
+    private boolean isBlockingStatus(SubscriptionStatus status) {
+        return status == SubscriptionStatus.ACTIVE
+                || status == SubscriptionStatus.TRIAL
+                || status == SubscriptionStatus.PAST_DUE;
+    }
+
+    private boolean isBlockingStripeSubscription(com.stripe.model.Subscription stripeSubscription) {
+        String status = stripeSubscription.getStatus();
+        return "active".equals(status)
+                || "trialing".equals(status)
+                || "past_due".equals(status)
+                || Boolean.TRUE.equals(stripeSubscription.getCancelAtPeriodEnd());
     }
 
     @Transactional
@@ -367,6 +498,17 @@ public class StripeService {
         if (stripeSubscription.getCurrentPeriodEnd() != null) {
             subscription.setCurrentPeriodEnd(toLocalDateTime(stripeSubscription.getCurrentPeriodEnd()));
         }
+
+        boolean cancelAtPeriodEnd = Boolean.TRUE.equals(stripeSubscription.getCancelAtPeriodEnd());
+        subscription.setCancelAtPeriodEnd(cancelAtPeriodEnd);
+
+        if (cancelAtPeriodEnd) {
+            if (subscription.getCancelledAt() == null) {
+                subscription.setCancelledAt(LocalDateTime.now());
+            }
+        } else if (subscription.getStatus() != SubscriptionStatus.CANCELLED) {
+            subscription.setCancelledAt(null);
+        }
     }
 
     private String extractPlanId(com.stripe.model.Subscription stripeSubscription) {
@@ -380,7 +522,8 @@ public class StripeService {
 
     private SubscriptionStatus mapStripeStatus(String status) {
         return switch (status) {
-            case "active", "trialing" -> SubscriptionStatus.ACTIVE;
+            case "active" -> SubscriptionStatus.ACTIVE;
+            case "trialing" -> SubscriptionStatus.TRIAL;
             case "past_due" -> SubscriptionStatus.PAST_DUE;
             case "canceled" -> SubscriptionStatus.CANCELLED;
             default -> SubscriptionStatus.EXPIRED;

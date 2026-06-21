@@ -143,6 +143,69 @@ const API = {
             console.error('Cancel subscription error:', error);
             throw error;
         }
+    },
+
+    async reactivateSubscription() {
+        try {
+            const response = await fetch(`${this.BASE_URL}/subscription/reactivate`, {
+                method: 'POST',
+                headers: await this.getHeaders(true)
+            });
+
+            if (!response.ok) {
+                let detail = `HTTP error! status: ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body.error) {
+                        detail = body.error;
+                    }
+                } catch {
+                    // ignore non-JSON error bodies
+                }
+                throw new Error(detail);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Reactivate subscription error:', error);
+            throw error;
+        }
+    },
+
+    async upgradeSubscription(priceId) {
+        try {
+            const response = await fetch(`${this.BASE_URL}/subscription/upgrade`, {
+                method: 'POST',
+                headers: await this.getHeaders(true),
+                body: JSON.stringify({ priceId })
+            });
+
+            if (!response.ok) {
+                let detail = `HTTP error! status: ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body.error) {
+                        detail = body.error;
+                    }
+                } catch {
+                    // ignore non-JSON error bodies
+                }
+                throw new Error(detail);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Upgrade subscription error:', error);
+            throw error;
+        }
+    },
+
+    hasProAccess(subscription) {
+        return SubscriptionHelper.hasProAccess(subscription);
+    },
+
+    isPendingCancel(subscription) {
+        return SubscriptionHelper.isPendingCancel(subscription);
     }
 };
 

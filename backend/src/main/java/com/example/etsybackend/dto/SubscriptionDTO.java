@@ -11,5 +11,6 @@ public class SubscriptionDTO {
     private SubscriptionStatus status;
     private LocalDateTime currentPeriodEnd;
     private LocalDateTime cancelledAt;
+    private Boolean cancelAtPeriodEnd;
 }
 

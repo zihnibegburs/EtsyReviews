@@ -41,6 +41,7 @@ const currentDelayRange = document.getElementById('currentDelayRange');
 const settingsSubscriptionStatus = document.getElementById('settingsSubscriptionStatus');
 const settingsSubscriptionRenewal = document.getElementById('settingsSubscriptionRenewal');
 const cancelSubscriptionBtn = document.getElementById('cancelSubscriptionBtn');
+const reactivateSubscriptionBtn = document.getElementById('reactivateSubscriptionBtn');
 
 // State
 let etsyData = null;
@@ -496,7 +497,7 @@ async function loadSubscriptionData() {
         const subscription = await API.getSubscription();
         console.log('✅ Subscription data:', subscription);
 
-        if (subscription && subscription.status === 'ACTIVE') {
+        if (API.hasProAccess(subscription)) {
             statusBadge.textContent = 'PRO';
             statusBadge.className = 'status-badge active';
         } else {
@@ -531,24 +532,80 @@ tabFAQ.addEventListener('click', () => showTab('faq'));
 tabSettings.addEventListener('click', () => showTab('settings'));
 
 // =============== PURCHASE PAGE ===============
+async function getStripePriceConfig() {
+    try {
+        const response = await fetch(`${API.BASE_URL}/stripe/config`, {
+            headers: await API.getHeaders(true)
+        });
+        if (response.ok) {
+            const data = await response.json();
+            if (data?.priceIdMonthly && data?.priceIdYearly) {
+                return data;
+            }
+        }
+    } catch (error) {
+        console.warn('Could not load Stripe config from API:', error.message);
+    }
+
+    if (API_CONFIG.STRIPE_PRICE_ID_MONTHLY && API_CONFIG.STRIPE_PRICE_ID_YEARLY) {
+        return {
+            priceIdMonthly: API_CONFIG.STRIPE_PRICE_ID_MONTHLY,
+            priceIdYearly: API_CONFIG.STRIPE_PRICE_ID_YEARLY
+        };
+    }
+
+    return null;
+}
+
 async function loadPurchasePageData() {
     if (!isAuthenticated) return;
 
     try {
-        const subscription = await API.getSubscription();
-        const hasActive = subscription?.status === 'ACTIVE'
-            || subscription?.status === 'TRIAL'
-            || subscription?.status === 'PAST_DUE';
-        const isPendingCancel = hasActive && !!subscription?.cancelledAt;
+        const [subscription, priceConfig] = await Promise.all([
+            API.getSubscription(),
+            getStripePriceConfig()
+        ]);
+        const hasActive = API.hasProAccess(subscription);
+        const isPendingCancel = API.isPendingCancel(subscription);
         const periodEnd = formatSubscriptionDate(subscription?.currentPeriodEnd);
+        const monthlyPriceId = priceConfig?.priceIdMonthly;
+        const yearlyPriceId = priceConfig?.priceIdYearly;
+        const isMonthly = hasActive && monthlyPriceId && subscription.planId === monthlyPriceId;
+        const isYearly = hasActive && yearlyPriceId && subscription.planId === yearlyPriceId;
 
         if (hasActive) {
             currentPlan.textContent = 'PRO';
             currentPlan.className = 'status-badge active';
-            buyMonthly.disabled = true;
-            buyYearly.disabled = true;
-            buyMonthly.textContent = 'Current Plan';
-            buyYearly.textContent = 'Current Plan';
+
+            if (isYearly) {
+                buyMonthly.disabled = true;
+                buyMonthly.textContent = 'Monthly';
+                delete buyMonthly.dataset.action;
+                buyYearly.disabled = true;
+                buyYearly.textContent = 'Current Plan';
+                delete buyYearly.dataset.action;
+            } else if (isMonthly) {
+                buyMonthly.disabled = true;
+                buyMonthly.textContent = 'Current Plan';
+                delete buyMonthly.dataset.action;
+
+                if (isPendingCancel) {
+                    buyYearly.disabled = true;
+                    buyYearly.textContent = 'Reactivate in Settings';
+                    delete buyYearly.dataset.action;
+                } else {
+                    buyYearly.disabled = false;
+                    buyYearly.textContent = 'Upgrade to Yearly';
+                    buyYearly.dataset.action = 'upgrade';
+                }
+            } else {
+                buyMonthly.disabled = true;
+                buyMonthly.textContent = 'Current Plan';
+                delete buyMonthly.dataset.action;
+                buyYearly.disabled = true;
+                buyYearly.textContent = 'Current Plan';
+                delete buyYearly.dataset.action;
+            }
 
             if (periodEnd) {
                 currentPlanExpiry.textContent = isPendingCancel
@@ -566,6 +623,8 @@ async function loadPurchasePageData() {
             buyYearly.disabled = false;
             buyMonthly.textContent = 'Get Monthly';
             buyYearly.textContent = 'Get Yearly';
+            delete buyMonthly.dataset.action;
+            delete buyYearly.dataset.action;
             currentPlanExpiry.textContent = '';
             currentPlanExpiry.classList.add('hidden');
         }
@@ -577,6 +636,8 @@ async function loadPurchasePageData() {
         buyYearly.disabled = false;
         buyMonthly.textContent = 'Get Monthly';
         buyYearly.textContent = 'Get Yearly';
+        delete buyMonthly.dataset.action;
+        delete buyYearly.dataset.action;
         currentPlanExpiry.textContent = '';
         currentPlanExpiry.classList.add('hidden');
     }
@@ -601,6 +662,41 @@ buyYearly.addEventListener('click', async () => {
         alert('Please login first');
         return;
     }
+
+    if (buyYearly.dataset.action === 'upgrade') {
+        const confirmed = confirm(
+            'Upgrade to the yearly plan?\n\nStripe will apply prorated credit from your current monthly plan.'
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        buyYearly.disabled = true;
+        const originalLabel = buyYearly.textContent;
+        buyYearly.textContent = 'Upgrading...';
+
+        try {
+            const priceConfig = await getStripePriceConfig();
+            if (!priceConfig?.priceIdYearly) {
+                throw new Error('Could not load yearly plan price');
+            }
+
+            await API.upgradeSubscription(priceConfig.priceIdYearly);
+            await loadPurchasePageData();
+            loadSubscriptionData();
+            alert('Upgraded to yearly plan successfully.');
+        } catch (error) {
+            console.error('❌ Upgrade failed:', error);
+            alert('Failed to upgrade: ' + error.message);
+            await loadPurchasePageData();
+        } finally {
+            if (buyYearly.textContent === 'Upgrading...') {
+                buyYearly.textContent = originalLabel;
+            }
+        }
+        return;
+    }
+
     if (buyYearly.disabled) {
         alert('You already have an active PRO subscription.');
         return;
@@ -619,10 +715,8 @@ function formatSubscriptionDate(value) {
 }
 
 function updateSubscriptionSettingsUI(subscription) {
-    const hasActive = subscription?.status === 'ACTIVE'
-        || subscription?.status === 'TRIAL'
-        || subscription?.status === 'PAST_DUE';
-    const isPendingCancel = hasActive && !!subscription?.cancelledAt;
+    const hasActive = API.hasProAccess(subscription);
+    const isPendingCancel = API.isPendingCancel(subscription);
     const renewsAt = formatSubscriptionDate(subscription?.currentPeriodEnd);
 
     if (hasActive) {
@@ -635,12 +729,19 @@ function updateSubscriptionSettingsUI(subscription) {
                 : 'Cancellation scheduled';
             cancelSubscriptionBtn.disabled = true;
             cancelSubscriptionBtn.textContent = 'Cancellation scheduled';
+            cancelSubscriptionBtn.classList.add('hidden');
+            reactivateSubscriptionBtn.classList.remove('hidden');
+            reactivateSubscriptionBtn.disabled = false;
+            reactivateSubscriptionBtn.textContent = 'Reactivate subscription';
         } else {
             settingsSubscriptionRenewal.textContent = renewsAt
                 ? `Renews on ${renewsAt}`
                 : 'Active subscription';
             cancelSubscriptionBtn.disabled = false;
             cancelSubscriptionBtn.textContent = 'Cancel subscription';
+            cancelSubscriptionBtn.classList.remove('hidden');
+            reactivateSubscriptionBtn.classList.add('hidden');
+            reactivateSubscriptionBtn.disabled = true;
         }
     } else {
         settingsSubscriptionStatus.textContent = 'FREE';
@@ -648,6 +749,9 @@ function updateSubscriptionSettingsUI(subscription) {
         settingsSubscriptionRenewal.textContent = 'No active subscription';
         cancelSubscriptionBtn.disabled = true;
         cancelSubscriptionBtn.textContent = 'Cancel subscription';
+        cancelSubscriptionBtn.classList.remove('hidden');
+        reactivateSubscriptionBtn.classList.add('hidden');
+        reactivateSubscriptionBtn.disabled = true;
     }
 }
 
@@ -697,6 +801,39 @@ cancelSubscriptionBtn.addEventListener('click', async () => {
     } catch (error) {
         console.error('❌ Failed to cancel subscription:', error);
         alert('Failed to cancel subscription: ' + error.message);
+        await loadSettingsPageData();
+    }
+});
+
+reactivateSubscriptionBtn.addEventListener('click', async () => {
+    if (!isAuthenticated) {
+        alert('Please login first');
+        return;
+    }
+
+    if (reactivateSubscriptionBtn.disabled) {
+        return;
+    }
+
+    const confirmed = confirm(
+        'Reactivate your PRO subscription?\n\nBilling will continue as normal at the end of the current period.'
+    );
+    if (!confirmed) {
+        return;
+    }
+
+    reactivateSubscriptionBtn.disabled = true;
+    reactivateSubscriptionBtn.textContent = 'Reactivating...';
+
+    try {
+        const subscription = await API.reactivateSubscription();
+        updateSubscriptionSettingsUI(subscription);
+        loadSubscriptionData();
+        loadPurchasePageData();
+        alert('Subscription reactivated successfully.');
+    } catch (error) {
+        console.error('❌ Failed to reactivate subscription:', error);
+        alert('Failed to reactivate subscription: ' + error.message);
         await loadSettingsPageData();
     }
 });

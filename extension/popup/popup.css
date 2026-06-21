@@ -730,3 +730,12 @@ body {
 .subscription-cancel-note {
     margin-top: 8px;
 }
+
+#reactivateSubscriptionBtn {
+    margin-bottom: 8px;
+    width: 100%;
+}
+
+#cancelSubscriptionBtn {
+    width: 100%;
+}

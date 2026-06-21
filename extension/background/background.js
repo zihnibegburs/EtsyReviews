@@ -1,5 +1,5 @@
 // Background Service Worker - Etsy Review Scraper
-importScripts('../utils/config.js', '../utils/reviewFetcher.js');
+importScripts('../utils/config.js', '../utils/subscription.js', '../utils/reviewFetcher.js');
 
 console.log('🚀 Background service worker starting...');
 console.log('🔗 API:', API_CONFIG.BASE_URL);
@@ -288,7 +288,7 @@ async function checkSubscriptionStatus() {
             console.log('Subscription status:', subscription.status);
 
             if (chrome.action) {
-                if (subscription.status === 'ACTIVE') {
+                if (SubscriptionHelper.hasProAccess(subscription)) {
                     await chrome.action.setBadgeText({ text: '✓' });
                     await chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
                 } else {
