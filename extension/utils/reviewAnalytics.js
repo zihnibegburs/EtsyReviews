@@ -79,7 +79,7 @@ function computeReviewStats(reviews) {
             wordCountSum += countWords(review.text);
         }
 
-        if (review.photoUrl) {
+        if (review.photoUrl || review.appreciationPhotoUrl) {
             withPhoto += 1;
         }
     });

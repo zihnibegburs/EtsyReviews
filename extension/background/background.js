@@ -10,6 +10,8 @@ let fetchAborted = false;
 let activeFetchTabId = null;
 let lastProgressReviews = [];
 let lastJsDataSummary = null;
+let lastFetchedPage = 0;
+let lastFetchMethod = 'deepDive';
 
 function broadcastReviewMessage(message) {
     chrome.runtime.sendMessage(message).catch(() => {
@@ -75,10 +77,19 @@ async function tryDomFallback(tabId, options) {
     return null;
 }
 
-async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax, reviewScope, sortOption }) {
+async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax, reviewScope, sortOption, resumeFrom }) {
     fetchAborted = false;
-    lastProgressReviews = [];
-    lastJsDataSummary = null;
+    if (resumeFrom?.reviews?.length > 0) {
+        lastProgressReviews = resumeFrom.reviews;
+        lastJsDataSummary = resumeFrom.jsData || null;
+        lastFetchedPage = resumeFrom.page || 0;
+        lastFetchMethod = resumeFrom.method || 'deepDive';
+    } else {
+        lastProgressReviews = [];
+        lastJsDataSummary = null;
+        lastFetchedPage = 0;
+        lastFetchMethod = 'deepDive';
+    }
     activeFetchTabId = tabId;
 
     const data = await resolveEtsyData(tabId);
@@ -88,11 +99,15 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
 
     const shouldAbort = () => fetchAborted;
 
-    const onProgress = (reviews, page, jsDataSummary) => {
+    const onProgress = (reviews, page, jsDataSummary, fetchMethod) => {
         if (fetchAborted) {
             return;
         }
         lastProgressReviews = reviews;
+        lastFetchedPage = page;
+        if (fetchMethod) {
+            lastFetchMethod = fetchMethod;
+        }
         if (jsDataSummary) {
             lastJsDataSummary = jsDataSummary;
         }
@@ -104,7 +119,8 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
             total: reviews.length,
             reviews,
             limitReached: !isProUser && reviews.length >= freeLimit,
-            jsData: jsDataSummary || lastJsDataSummary
+            jsData: jsDataSummary || lastJsDataSummary,
+            fetchMethod: lastFetchMethod
         });
     };
 
@@ -117,7 +133,8 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
             reviewScope,
             sortOption,
             onProgress,
-            shouldAbort
+            shouldAbort,
+            resumeFrom
         });
 
         if (result.cancelled) {
@@ -134,7 +151,17 @@ async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMa
                 reviews: lastProgressReviews,
                 limitReached: !isProUser && lastProgressReviews.length >= freeLimit,
                 cancelled: true,
-                jsData: lastJsDataSummary
+                jsData: lastJsDataSummary,
+                lastPage: lastFetchedPage,
+                fetchMethod: lastFetchMethod,
+                resumeFrom: lastProgressReviews.length > 0 && lastFetchedPage > 0
+                    ? {
+                        page: lastFetchedPage,
+                        reviews: lastProgressReviews,
+                        jsData: lastJsDataSummary,
+                        method: lastFetchMethod
+                    }
+                    : null
             };
             broadcastReviewMessage({ type: 'reviewCancelled', ...result });
             return result;

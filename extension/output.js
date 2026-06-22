@@ -10,6 +10,12 @@ let isFetching = false;
 let currentTabId = null;
 let fetchFinished = false;
 let stopRequested = false;
+let resumeState = null;
+let fetchReviewScope = 'shopReviews';
+let fetchSortOption = 'Relevancy';
+
+const STOP_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2"/></svg>';
+const RESUME_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5L4 2.5z"/></svg>';
 
 function openCheckout() {
     chrome.tabs.create({ url: chrome.runtime.getURL('checkout.html') });
@@ -281,12 +287,31 @@ function updateJsDataHeader(jsData) {
     renderRatingCounts(jsData.ratingCounts);
 }
 
-function buildExportContent(review) {
-    const text = review.text || '';
-    if (!review.photoUrl) {
-        return text;
+function getListingUrl(review) {
+    const raw = review.itemUrl || (review.listingId ? `/listing/${review.listingId}` : '');
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `https://www.etsy.com${raw.startsWith('/') ? raw : `/${raw}`}`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildReviewTextCell(review) {
+    const textEsc = escapeHtml(review.text || '');
+    const photoUrl = review.photoUrl || review.appreciationPhotoUrl;
+    if (!photoUrl) {
+        return textEsc;
     }
-    return text ? `${text}\n[Image: ${review.photoUrl}]` : review.photoUrl;
+
+    const photoEsc = escapeHtml(photoUrl);
+    const photoHtml = `<div class="review-photo"><a href="${photoEsc}" target="_blank" rel="noopener noreferrer"><img src="${photoEsc}" alt="Review photo" loading="lazy" /></a></div>`;
+    return textEsc ? `${textEsc}${photoHtml}` : photoHtml;
+}
+
+function buildExportContent(review) {
+    return review.text || '';
 }
 
 const EXPORT_HEADERS = [
@@ -296,6 +321,7 @@ const EXPORT_HEADERS = [
     'Rating',
     'Recommend',
     'Content',
+    'Photo URL',
     'Purchased Item',
     'Date'
 ];
@@ -304,6 +330,7 @@ function buildExportRows() {
     const rows = [EXPORT_HEADERS];
 
     allReviews.forEach((review, index) => {
+        const photoUrl = review.photoUrl || review.appreciationPhotoUrl || '';
         rows.push([
             index + 1,
             review.transactionId || review.reviewId || '',
@@ -311,6 +338,7 @@ function buildExportRows() {
             review.rating ?? '',
             formatRecommended(review.isRecommended),
             buildExportContent(review),
+            photoUrl,
             review.item || '',
             review.date || ''
         ]);
@@ -432,9 +460,12 @@ function renderPage(page = 1) {
     `;
 
     pageReviews.forEach((review, index) => {
-        const reviewerEsc = String(review.reviewer).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const textEsc = String(review.text).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const itemEsc = String(review.item).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const reviewerEsc = escapeHtml(review.reviewer);
+        const itemEsc = escapeHtml(review.item);
+        const listingUrl = getListingUrl(review);
+        const itemCell = listingUrl
+            ? `<a href="${listingUrl.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer">${itemEsc}</a>`
+            : itemEsc;
 
         tableHtml += `
             <tr>
@@ -442,8 +473,8 @@ function renderPage(page = 1) {
                 <td>${reviewerEsc}</td>
                 <td class="review-rating">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</td>
                 <td>${review.date}</td>
-                <td>${textEsc}</td>
-                <td class="review-item"><a href="#">${itemEsc}</a></td>
+                <td class="review-text">${buildReviewTextCell(review)}</td>
+                <td class="review-item">${itemCell}</td>
             </tr>
         `;
     });
@@ -501,8 +532,13 @@ function renderPaginationControls(page, totalReviews = allReviews.length) {
 }
 
 function showSubscriptionBanner() {
+    if (document.getElementById('subscriptionBanner')) {
+        return;
+    }
+
     const reviewsDiv = document.getElementById('reviews');
     const statusDiv = document.createElement('div');
+    statusDiv.id = 'subscriptionBanner';
     statusDiv.style.cssText = 'background: #f0f3ff; border: 1px solid #667eea; border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center;';
     statusDiv.innerHTML = `
         <strong>Subscription:</strong> ${isProUser ? '<span style="color: #27ae60;">PRO ✓</span>' : '<span style="color: #e67e22;">FREE</span>'}
@@ -545,10 +581,11 @@ function updateLoadingTotalReviews(count) {
     }
 }
 
-function buildLoadingHtml(message, { stopping = false } = {}) {
+function buildLoadingHtml(message, { stopping = false, resuming = false } = {}) {
     const count = allReviews.length;
-    const stopLabel = stopping ? 'Stopping...' : 'Stop Fetching';
+    const stopLabel = stopping ? 'Stopping...' : 'Stop';
     const stopDisabled = stopping ? ' disabled' : '';
+    const resumeNote = resuming ? '<p class="hint">Resuming from where you left off</p>' : '<p class="hint">This may take a few minutes</p>';
 
     return `
         <div class="spinner"></div>
@@ -557,9 +594,12 @@ function buildLoadingHtml(message, { stopping = false } = {}) {
             <span class="loading-count-label">Total Reviews Collected</span>
         </div>
         <p>${message}</p>
-        <p class="hint">This may take a few minutes</p>
+        ${resumeNote}
         <div class="loading-actions">
-            <button id="stopFetchBtn" class="btn-stop"${stopDisabled}>${stopLabel}</button>
+            <button id="stopFetchBtn" class="btn-stop" type="button"${stopDisabled} aria-label="Stop fetching reviews">
+                ${STOP_ICON}
+                <span>${stopLabel}</span>
+            </button>
         </div>
     `;
 }
@@ -582,6 +622,36 @@ function showStoppingState() {
     loadingDiv.innerHTML = buildLoadingHtml('Stopping fetch...', { stopping: true });
 }
 
+function showStoppingState() {
+    const loadingDiv = document.getElementById('loading');
+    if (!loadingDiv || loadingDiv.style.display === 'none') return;
+    loadingDiv.innerHTML = buildLoadingHtml('Stopping fetch...', { stopping: true });
+}
+
+function buildCancelledBanner(reviewCount, resumeFrom) {
+    const canResume = resumeFrom?.page > 0 && resumeFrom?.reviews?.length > 0;
+    const resumeBtn = canResume
+        ? `<button id="resumeFetchBtn" class="btn-resume" type="button" aria-label="Continue fetching reviews">
+                ${RESUME_ICON}
+                <span>Continue from page ${resumeFrom.page + 1}</span>
+           </button>`
+        : '';
+
+    return `
+        <div class="cancelled-banner" id="cancelledBanner">
+            <div class="cancelled-banner-text">
+                <strong>Fetch paused</strong>
+                <span>Showing ${reviewCount} review${reviewCount === 1 ? '' : 's'} collected so far.</span>
+            </div>
+            ${resumeBtn}
+        </div>
+    `;
+}
+
+function bindResumeButton() {
+    document.getElementById('resumeFetchBtn')?.addEventListener('click', resumeFetching);
+}
+
 function handleFetchComplete(response, cancelled = false) {
     if (fetchFinished) return;
     fetchFinished = true;
@@ -595,19 +665,30 @@ function handleFetchComplete(response, cancelled = false) {
     }
 
     if (cancelled) {
+        resumeState = response.resumeFrom || (
+            response.lastPage > 0 && allReviews.length > 0
+                ? {
+                    page: response.lastPage,
+                    reviews: allReviews,
+                    jsData: response.jsData,
+                    method: response.fetchMethod || 'deepDive'
+                }
+                : null
+        );
+
         if (allReviews.length > 0) {
             renderPage(currentPage);
             const reviewsDiv = document.getElementById('reviews');
-            reviewsDiv.insertAdjacentHTML('afterbegin', `
-                <div class="warning" id="cancelledBanner">
-                    Fetch stopped. Showing ${allReviews.length} review${allReviews.length === 1 ? '' : 's'} collected so far.
-                </div>
-            `);
+            reviewsDiv.insertAdjacentHTML('afterbegin', buildCancelledBanner(allReviews.length, resumeState));
+            bindResumeButton();
         } else {
+            resumeState = null;
             document.getElementById('reviews').innerHTML = '<div class="warning">Fetch stopped. No reviews were collected.</div>';
         }
         return;
     }
+
+    resumeState = null;
 
     if (response?.limitReached) {
         showLimitBanner();
@@ -621,11 +702,22 @@ function handleFetchComplete(response, cancelled = false) {
     renderPage(currentPage);
 }
 
-function updateLoading(message) {
+function updateLoading(message, { resuming = false } = {}) {
     const loadingDiv = document.getElementById('loading');
     loadingDiv.style.display = 'block';
-    loadingDiv.innerHTML = buildLoadingHtml(message);
+    loadingDiv.innerHTML = buildLoadingHtml(message, { resuming });
     document.getElementById('stopFetchBtn')?.addEventListener('click', stopFetching);
+}
+
+function resumeFetching() {
+    if (!resumeState || isFetching) return;
+
+    document.getElementById('cancelledBanner')?.remove();
+    startReviewFetchFlow(currentTabId, {
+        reviewScope: fetchReviewScope,
+        sortOption: fetchSortOption,
+        resumeFrom: resumeState
+    });
 }
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -639,6 +731,14 @@ chrome.runtime.onMessage.addListener((message) => {
         updateLoadingTotalReviews(allReviews.length);
         updateJsDataHeader(message.jsData);
         renderAnalytics();
+        if (message.page > 0) {
+            resumeState = {
+                page: message.page,
+                reviews: allReviews,
+                jsData: message.jsData || resumeState?.jsData || null,
+                method: message.fetchMethod || resumeState?.method || 'deepDive'
+            };
+        }
         const loadingMessage = document.querySelector('#loading > p');
         if (loadingMessage) {
             loadingMessage.textContent = `Fetching reviews... page ${message.page} (${allReviews.length} collected)`;
@@ -660,14 +760,28 @@ chrome.runtime.onMessage.addListener((message) => {
     }
 });
 
-async function startReviewFetchFlow(tabId, { reviewScope, sortOption }) {
+async function startReviewFetchFlow(tabId, { reviewScope, sortOption, resumeFrom = null }) {
     const reviewsDiv = document.getElementById('reviews');
+    const isResume = !!resumeFrom;
+
+    fetchReviewScope = reviewScope;
+    fetchSortOption = sortOption;
+
+    if (isResume) {
+        allReviews = [...resumeFrom.reviews];
+        resumeState = resumeFrom;
+    }
 
     showSubscriptionBanner();
     isFetching = true;
     stopRequested = false;
     fetchFinished = false;
-    updateLoading('Fetching reviews from Etsy...');
+    updateLoading(
+        isResume
+            ? `Resuming fetch from page ${resumeFrom.page + 1}...`
+            : 'Fetching reviews from Etsy...',
+        { resuming: isResume }
+    );
 
     const delayConfig = await new Promise((resolve) => {
         chrome.storage.local.get(['fetchDelayMin', 'fetchDelayMax'], (result) => {
@@ -686,7 +800,8 @@ async function startReviewFetchFlow(tabId, { reviewScope, sortOption }) {
         delayMin: delayConfig.min,
         delayMax: delayConfig.max,
         reviewScope,
-        sortOption
+        sortOption,
+        resumeFrom
     }, (response) => {
         if (chrome.runtime.lastError) {
             hideLoading();
@@ -710,6 +825,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const reviewsDiv = document.getElementById('reviews');
     const { tabId, reviewScope, sortOption } = getUrlParams();
     currentTabId = tabId;
+    fetchReviewScope = reviewScope;
+    fetchSortOption = sortOption;
 
     if (!tabId) {
         reviewsDiv.innerHTML = '<div class="error">⚠️ Open reviews from an Etsy listing tab using the extension popup.</div>';
