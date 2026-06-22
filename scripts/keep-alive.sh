@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-URL="${RENDER_HEALTH_URL:-https://etsy-backend-u3x2.onrender.com/health}"
+URL="${RENDER_HEALTH_URL:-https://etsy-backend-u3x2.onrender.com/}"
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Pinging $URL"
 

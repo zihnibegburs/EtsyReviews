@@ -8,15 +8,57 @@ let etsyData = null;
 let activeFetchPromise = null;
 let fetchAborted = false;
 let activeFetchTabId = null;
+let activeOutputTabId = null;
+let currentFetchSessionId = null;
 let lastProgressReviews = [];
 let lastJsDataSummary = null;
 let lastFetchedPage = 0;
 let lastFetchMethod = 'deepDive';
 
+function resetFetchProgressState() {
+    lastProgressReviews = [];
+    lastJsDataSummary = null;
+    lastFetchedPage = 0;
+    lastFetchMethod = 'deepDive';
+    activeFetchTabId = null;
+    currentFetchSessionId = null;
+}
+
 function broadcastReviewMessage(message) {
-    chrome.runtime.sendMessage(message).catch(() => {
+    const payload = currentFetchSessionId
+        ? { ...message, fetchSessionId: currentFetchSessionId }
+        : message;
+    chrome.runtime.sendMessage(payload).catch(() => {
         // output page may not be listening yet
     });
+}
+
+async function abortActiveFetch({ silent = false } = {}) {
+    if (!activeFetchPromise && !activeFetchTabId) {
+        resetFetchProgressState();
+        fetchAborted = false;
+        return;
+    }
+
+    fetchAborted = true;
+    if (activeFetchTabId) {
+        chrome.tabs.sendMessage(activeFetchTabId, { action: 'abortDomFallback' }).catch(() => {});
+    }
+
+    if (activeFetchPromise) {
+        try {
+            await activeFetchPromise;
+        } catch (_) {
+            // fetch was cancelled or failed
+        }
+    }
+
+    resetFetchProgressState();
+    fetchAborted = false;
+
+    if (!silent) {
+        console.log('🛑 Active review fetch aborted');
+    }
 }
 
 async function getEtsyDataFromTab(tabId) {
@@ -77,8 +119,9 @@ async function tryDomFallback(tabId, options) {
     return null;
 }
 
-async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax, reviewScope, sortOption, resumeFrom }) {
+async function startReviewFetch({ tabId, isProUser, freeLimit, delayMin, delayMax, reviewScope, sortOption, resumeFrom, fetchSessionId }) {
     fetchAborted = false;
+    currentFetchSessionId = fetchSessionId || null;
     if (resumeFrom?.reviews?.length > 0) {
         lastProgressReviews = resumeFrom.reviews;
         lastJsDataSummary = resumeFrom.jsData || null;
@@ -242,32 +285,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     if (msg.type === 'stopReviewFetch') {
-        fetchAborted = true;
-        if (activeFetchTabId) {
-            chrome.tabs.sendMessage(activeFetchTabId, { action: 'abortDomFallback' }).catch(() => {});
-        }
-        sendResponse({ success: true });
-        return false;
+        abortActiveFetch({ silent: true })
+            .then(() => sendResponse({ success: true }))
+            .catch((error) => sendResponse({ error: error.message }));
+        return true;
+    }
+
+    if (msg.type === 'abortReviewFetch') {
+        abortActiveFetch({ silent: true })
+            .then(() => sendResponse({ success: true }))
+            .catch((error) => sendResponse({ error: error.message }));
+        return true;
     }
 
     if (msg.type === 'startReviewFetch') {
-        if (activeFetchPromise) {
-            sendResponse({ error: 'Review fetch already in progress' });
-            return false;
-        }
+        const outputTabId = sender.tab?.id || null;
 
-        activeFetchPromise = startReviewFetch(msg)
-            .then((result) => {
+        (async () => {
+            try {
+                if (!msg.resumeFrom) {
+                    await abortActiveFetch({ silent: true });
+                } else if (activeFetchPromise) {
+                    sendResponse({ error: 'Review fetch already in progress' });
+                    return;
+                }
+
+                activeOutputTabId = outputTabId;
+                activeFetchPromise = startReviewFetch(msg);
+                const result = await activeFetchPromise;
                 sendResponse({ success: true, ...result });
-                return result;
-            })
-            .catch((error) => {
+            } catch (error) {
                 sendResponse({ error: error.message || 'Failed to fetch reviews' });
-                throw error;
-            })
-            .finally(() => {
+            } finally {
                 activeFetchPromise = null;
-            });
+                if (activeOutputTabId === outputTabId) {
+                    activeOutputTabId = null;
+                }
+            }
+        })();
 
         return true;
     }
@@ -349,6 +404,17 @@ if (chrome.tabs && chrome.tabs.onUpdated) {
         }
     });
     console.log('✅ Tab update listener registered');
+}
+
+if (chrome.tabs && chrome.tabs.onRemoved) {
+    chrome.tabs.onRemoved.addListener((tabId) => {
+        if (tabId === activeOutputTabId) {
+            console.log('📄 Output page closed, aborting fetch');
+            activeOutputTabId = null;
+            abortActiveFetch({ silent: true });
+        }
+    });
+    console.log('✅ Tab removed listener registered');
 }
 
 console.log('✅ Background service worker loaded successfully');

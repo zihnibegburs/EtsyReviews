@@ -15,6 +15,30 @@ let stopRequested = false;
 let resumeState = null;
 let fetchReviewScope = 'shopReviews';
 let fetchSortOption = 'Relevancy';
+let fetchSessionId = null;
+
+function isCurrentFetchMessage(message) {
+    return !message.fetchSessionId || message.fetchSessionId === fetchSessionId;
+}
+
+function resetFetchUiState() {
+    allReviews = [];
+    resumeState = null;
+    currentPage = 1;
+    ratingFilter = null;
+    fetchFinished = false;
+    stopRequested = false;
+    document.getElementById('reviews').innerHTML = '';
+    document.getElementById('cancelledBanner')?.remove();
+}
+
+function abortBackgroundFetch() {
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'abortReviewFetch' }, () => {
+            resolve();
+        });
+    });
+}
 
 const STOP_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2"/></svg>';
 const RESUME_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5L4 2.5z"/></svg>';
@@ -656,12 +680,6 @@ function showStoppingState() {
     loadingDiv.innerHTML = buildLoadingHtml('Stopping fetch...', { stopping: true });
 }
 
-function showStoppingState() {
-    const loadingDiv = document.getElementById('loading');
-    if (!loadingDiv || loadingDiv.style.display === 'none') return;
-    loadingDiv.innerHTML = buildLoadingHtml('Stopping fetch...', { stopping: true });
-}
-
 function buildCancelledBanner(reviewCount, resumeFrom) {
     const canResume = resumeFrom?.page > 0 && resumeFrom?.reviews?.length > 0;
     const resumeBtn = canResume
@@ -755,6 +773,10 @@ function resumeFetching() {
 }
 
 chrome.runtime.onMessage.addListener((message) => {
+    if (!isCurrentFetchMessage(message)) {
+        return;
+    }
+
     if (message.type === 'reviewProgress') {
         if (stopRequested || fetchFinished) {
             return;
@@ -801,15 +823,20 @@ async function startReviewFetchFlow(tabId, { reviewScope, sortOption, resumeFrom
     fetchReviewScope = reviewScope;
     fetchSortOption = sortOption;
 
-    if (isResume) {
+    if (!isResume) {
+        await abortBackgroundFetch();
+        resetFetchUiState();
+    } else {
         allReviews = [...resumeFrom.reviews];
         resumeState = resumeFrom;
+        fetchFinished = false;
+        stopRequested = false;
     }
+
+    fetchSessionId = Date.now();
 
     showSubscriptionBanner();
     isFetching = true;
-    stopRequested = false;
-    fetchFinished = false;
     updateLoading(
         isResume
             ? `Resuming fetch from page ${resumeFrom.page + 1}...`
@@ -835,7 +862,8 @@ async function startReviewFetchFlow(tabId, { reviewScope, sortOption, resumeFrom
         delayMax: delayConfig.max,
         reviewScope,
         sortOption,
-        resumeFrom
+        resumeFrom,
+        fetchSessionId
     }, (response) => {
         if (chrome.runtime.lastError) {
             hideLoading();
@@ -893,4 +921,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     updatePremiumButton();
     startReviewFetchFlow(tabId, { reviewScope, sortOption });
+});
+
+window.addEventListener('pagehide', () => {
+    chrome.runtime.sendMessage({ type: 'abortReviewFetch' });
 });

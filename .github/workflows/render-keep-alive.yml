@@ -11,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Ping Render health endpoint
+      - name: Ping Render backend (external keep-alive)
         env:
           HEALTH_URL: ${{ vars.RENDER_HEALTH_URL }}
         run: |
-          URL="${HEALTH_URL:-https://etsy-backend-u3x2.onrender.com/health}"
+          URL="${HEALTH_URL:-https://etsy-backend-u3x2.onrender.com/}"
           echo "Pinging $URL at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           for attempt in 1 2 3; do

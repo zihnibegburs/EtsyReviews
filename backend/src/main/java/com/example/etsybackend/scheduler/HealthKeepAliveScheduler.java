@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
-@ConditionalOnProperty(name = "app.health-check.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.health-check.enabled", havingValue = "true", matchIfMissing = false)
 public class HealthKeepAliveScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(HealthKeepAliveScheduler.class);
