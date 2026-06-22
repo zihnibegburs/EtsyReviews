@@ -1,6 +1,8 @@
 // Output page - Review fetching and display
 
 const REVIEWS_PER_PAGE = 10;
+const MONTHS_VISIBLE_LIMIT = 10;
+let monthBarsExpanded = false;
 const FREE_USER_REVIEW_LIMIT = 50;
 let allReviews = [];
 let currentPage = 1;
@@ -84,27 +86,50 @@ function renderRatingBars(distribution, total) {
     }).join('');
 }
 
-function renderMonthBars(monthlyData) {
+function renderMonthBarRow({ month, count }, maxCount) {
+    const width = maxCount ? (count / maxCount) * 100 : 0;
+    const [year, monthNum] = month.split('-');
+    const label = `${monthNum}/${year.slice(2)}`;
+    return `
+        <div class="month-bar-row">
+            <span class="month-bar-label">${label}</span>
+            <div class="rating-bar-track">
+                <div class="rating-bar-fill month-bar-fill" style="width: ${width}%"></div>
+            </div>
+            <span class="rating-bar-count">${count}</span>
+        </div>
+    `;
+}
+
+function renderMonthBars(monthlyData, expanded = false) {
     if (!monthlyData.length) {
         return '<p class="analytics-empty">No dated reviews found.</p>';
     }
 
     const maxCount = Math.max(...monthlyData.map((item) => item.count));
+    const hasMore = monthlyData.length > MONTHS_VISIBLE_LIMIT;
+    const visibleData = expanded || !hasMore
+        ? monthlyData
+        : monthlyData.slice(-MONTHS_VISIBLE_LIMIT);
 
-    return monthlyData.map(({ month, count }) => {
-        const width = maxCount ? (count / maxCount) * 100 : 0;
-        const [year, monthNum] = month.split('-');
-        const label = `${monthNum}/${year.slice(2)}`;
-        return `
-            <div class="month-bar-row">
-                <span class="month-bar-label">${label}</span>
-                <div class="rating-bar-track">
-                    <div class="rating-bar-fill month-bar-fill" style="width: ${width}%"></div>
-                </div>
-                <span class="rating-bar-count">${count}</span>
-            </div>
-        `;
-    }).join('');
+    const rows = visibleData.map((item) => renderMonthBarRow(item, maxCount)).join('');
+    const toggleButton = hasMore
+        ? `<button type="button" class="month-bars-toggle" id="monthBarsToggle">
+            ${expanded
+                ? 'Show less'
+                : `Show ${monthlyData.length - MONTHS_VISIBLE_LIMIT} more`}
+        </button>`
+        : '';
+
+    return `<div class="month-bars-list">${rows}</div>${toggleButton}`;
+}
+
+function updateMonthBars(monthEl, monthlyData) {
+    monthEl.innerHTML = renderMonthBars(monthlyData, monthBarsExpanded);
+    monthEl.querySelector('#monthBarsToggle')?.addEventListener('click', () => {
+        monthBarsExpanded = !monthBarsExpanded;
+        updateMonthBars(monthEl, monthlyData);
+    });
 }
 
 function renderKeywordTags(keywords) {
@@ -165,7 +190,7 @@ function renderAnalytics() {
         distributionEl.innerHTML = renderRatingBars(stats.ratingDistribution, stats.total);
     }
     if (monthEl) {
-        monthEl.innerHTML = renderMonthBars(monthlyData);
+        updateMonthBars(monthEl, monthlyData);
     }
     if (keywordsEl) {
         keywordsEl.innerHTML = renderKeywordTags(keywords);
@@ -294,6 +319,13 @@ function getListingUrl(review) {
     return `https://www.etsy.com${raw.startsWith('/') ? raw : `/${raw}`}`;
 }
 
+function getProfileUrl(review) {
+    const raw = review.profileUrl || '';
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `https://www.etsy.com${raw.startsWith('/') ? raw : `/${raw}`}`;
+}
+
 function escapeHtml(value) {
     return String(value ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -318,6 +350,7 @@ const EXPORT_HEADERS = [
     '#',
     'Transaction ID',
     'Author',
+    'Profile URL',
     'Rating',
     'Recommend',
     'Content',
@@ -335,6 +368,7 @@ function buildExportRows() {
             index + 1,
             review.transactionId || review.reviewId || '',
             review.reviewer || '',
+            getProfileUrl(review),
             review.rating ?? '',
             formatRecommended(review.isRecommended),
             buildExportContent(review),

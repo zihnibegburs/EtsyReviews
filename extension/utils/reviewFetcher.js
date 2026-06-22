@@ -67,9 +67,12 @@ function parseDeepDiveReviewNode(node) {
     const ratingMatch = ratingLabel.match(/Rating:\s*(\d)/i) || ratingLabel.match(/(\d)\s*out of/i);
     const rating = ratingMatch ? parseInt(ratingMatch[1], 10) : 0;
 
-    const reviewer = node.querySelector('a[href*="/people/"]')?.textContent?.trim() ||
+    const profileLinkEl = node.querySelector('a[href*="/people/"]') ||
+        node.querySelector('a.wt-text-link-no-underline');
+    const reviewer = profileLinkEl?.textContent?.trim() ||
         node.querySelector('a.wt-text-link-no-underline')?.textContent?.trim() ||
         'Anonymous';
+    const profileUrl = profileLinkEl?.getAttribute('href') || '';
 
     const dateRaw = node.querySelector('span.wt-text-body-small--tight, .wt-text-body-small')?.textContent?.trim() || '';
 
@@ -90,6 +93,7 @@ function parseDeepDiveReviewNode(node) {
     return {
         reviewId,
         reviewer,
+        profileUrl,
         rating,
         text,
         item,
@@ -138,9 +142,11 @@ function parseReviewsFromHtml(htmlString) {
     const seen = new Set();
 
     return Array.from(reviewNodes).map((node) => {
-        const reviewer = node.querySelector(
-            'a.wt-text-link-no-underline.wt-text-title-small, [data-reviewer-name], .shop2-review-byline a, .wt-text-caption a'
-        )?.textContent?.trim() || 'Anonymous';
+        const profileLinkEl = node.querySelector(
+            'a[href*="/people/"], a.wt-text-link-no-underline.wt-text-title-small, [data-reviewer-name], .shop2-review-byline a, .wt-text-caption a'
+        );
+        const reviewer = profileLinkEl?.textContent?.trim() || 'Anonymous';
+        const profileUrl = profileLinkEl?.getAttribute('href') || '';
 
         const ratingValue = node.querySelector('input[name="rating"]')?.value ||
             node.querySelector('[aria-label*="out of 5"]')?.getAttribute('aria-label')?.match(/(\d)/)?.[1] ||
@@ -165,6 +171,7 @@ function parseReviewsFromHtml(htmlString) {
 
         return {
             reviewer,
+            profileUrl,
             rating: parseInt(ratingValue, 10) || 0,
             text,
             item,
@@ -191,6 +198,7 @@ function parseJsDataReview(entry) {
         transactionId: transactionId != null ? String(transactionId) : null,
         reviewId: transactionId != null ? String(transactionId) : null,
         reviewer: buyerInfo.name || 'Anonymous',
+        profileUrl: buyerInfo.profileUrl || '',
         rating: reviewInfo.rating || 0,
         isRecommended: isRecommended === true ? true : isRecommended === false ? false : null,
         text: reviewContent.reviewText || '',
