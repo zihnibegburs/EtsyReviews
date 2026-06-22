@@ -393,6 +393,215 @@
             margin: 16px 0;
             font-size: 14px;
         }
+
+        #analytics {
+            background: var(--color-surface);
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border-light);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        #analytics.is-visible {
+            display: block;
+        }
+
+        .analytics-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .analytics-header h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .analytics-subtitle {
+            margin: 4px 0 0;
+            font-size: 12px;
+            color: var(--color-text-muted);
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .analytics-stat {
+            background: var(--color-bg);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-md);
+            padding: 14px;
+        }
+
+        .analytics-stat-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .analytics-stat-value {
+            margin-top: 6px;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--color-text);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .analytics-panels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .analytics-panel {
+            background: var(--color-bg);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-md);
+            padding: 16px;
+        }
+
+        .analytics-panel h3 {
+            margin: 0 0 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .rating-bar-row {
+            display: grid;
+            grid-template-columns: 52px 1fr 36px;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .rating-bar-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+        }
+
+        .rating-bar-track {
+            height: 10px;
+            background: var(--color-border-light);
+            border-radius: var(--radius-full);
+            overflow: hidden;
+        }
+
+        .rating-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #E8A317, #F1641E);
+            border-radius: var(--radius-full);
+            min-width: 0;
+            transition: width 0.3s ease;
+        }
+
+        .rating-bar-count {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-text-muted);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .month-bar-row {
+            display: grid;
+            grid-template-columns: 72px 1fr 32px;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .month-bar-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+        }
+
+        .month-bar-fill {
+            background: var(--color-primary);
+        }
+
+        .keyword-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .keyword-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            color: var(--color-text);
+        }
+
+        .keyword-tag-count {
+            font-weight: 700;
+            color: var(--color-primary);
+        }
+
+        .analytics-empty {
+            font-size: 13px;
+            color: var(--color-text-muted);
+        }
+
+        .review-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 12px 14px;
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-lg);
+            background: var(--color-surface);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 8px;
+        }
+
+        .review-filters.hidden {
+            display: none;
+        }
+
+        .filter-chip {
+            padding: 6px 12px;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-full);
+            background: var(--color-surface);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            transition: background var(--transition), border-color var(--transition), color var(--transition);
+        }
+
+        .filter-chip:hover {
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+        }
+
+        .filter-chip.active {
+            background: var(--color-primary);
+            border-color: var(--color-primary);
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -438,6 +647,30 @@
             </div>
         </div>
 
+        <div id="analytics">
+            <div class="analytics-header">
+                <div>
+                    <h2>Review Analytics</h2>
+                    <p class="analytics-subtitle">Insights from collected reviews</p>
+                </div>
+            </div>
+            <div class="analytics-grid" id="analyticsStats"></div>
+            <div class="analytics-panels">
+                <div class="analytics-panel">
+                    <h3>Rating Distribution</h3>
+                    <div id="ratingDistribution"></div>
+                </div>
+                <div class="analytics-panel">
+                    <h3>Reviews by Month</h3>
+                    <div id="reviewsByMonth"></div>
+                </div>
+                <div class="analytics-panel">
+                    <h3>Top Keywords</h3>
+                    <div id="topKeywords"></div>
+                </div>
+            </div>
+        </div>
+
         <div id="loading">
             <div class="spinner"></div>
             <div class="loading-stats">
@@ -448,6 +681,8 @@
             <p class="hint">This may take a few minutes</p>
         </div>
 
+        <div id="reviewFilters" class="review-filters hidden"></div>
+
         <div id="reviews"></div>
         <div id="pagination-controls"></div>
     </div>
@@ -455,6 +690,7 @@
     <script src="vendor/xlsx.mini.min.js"></script>
     <script src="utils/config.js"></script>
     <script src="utils/subscription.js"></script>
+    <script src="utils/reviewAnalytics.js"></script>
     <script src="output.js"></script>
 </body>
 </html>

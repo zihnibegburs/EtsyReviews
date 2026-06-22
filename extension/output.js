@@ -4,6 +4,7 @@ const REVIEWS_PER_PAGE = 10;
 const FREE_USER_REVIEW_LIMIT = 50;
 let allReviews = [];
 let currentPage = 1;
+let ratingFilter = null;
 let isProUser = false;
 let isFetching = false;
 let currentTabId = null;
@@ -40,6 +41,171 @@ function getUrlParams() {
 
 function getTabIdFromUrl() {
     return getUrlParams().tabId;
+}
+
+function formatPercent(value) {
+    if (value == null) return '-';
+    return `${value.toFixed(1)}%`;
+}
+
+function formatStatNumber(value, decimals = 1) {
+    if (value == null) return '-';
+    return Number(value).toFixed(decimals);
+}
+
+function getFilteredReviews() {
+    if (!ratingFilter) return allReviews;
+    return allReviews.filter((review) => review.rating === ratingFilter);
+}
+
+function renderRatingBars(distribution, total) {
+    if (!total) {
+        return '<p class="analytics-empty">No rating data yet.</p>';
+    }
+
+    return [5, 4, 3, 2, 1].map((star) => {
+        const count = distribution[star] || 0;
+        const width = total ? (count / total) * 100 : 0;
+        return `
+            <div class="rating-bar-row">
+                <span class="rating-bar-label">${star} ★</span>
+                <div class="rating-bar-track">
+                    <div class="rating-bar-fill" style="width: ${width}%"></div>
+                </div>
+                <span class="rating-bar-count">${count}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderMonthBars(monthlyData) {
+    if (!monthlyData.length) {
+        return '<p class="analytics-empty">No dated reviews found.</p>';
+    }
+
+    const maxCount = Math.max(...monthlyData.map((item) => item.count));
+
+    return monthlyData.map(({ month, count }) => {
+        const width = maxCount ? (count / maxCount) * 100 : 0;
+        const [year, monthNum] = month.split('-');
+        const label = `${monthNum}/${year.slice(2)}`;
+        return `
+            <div class="month-bar-row">
+                <span class="month-bar-label">${label}</span>
+                <div class="rating-bar-track">
+                    <div class="rating-bar-fill month-bar-fill" style="width: ${width}%"></div>
+                </div>
+                <span class="rating-bar-count">${count}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderKeywordTags(keywords) {
+    if (!keywords.length) {
+        return '<p class="analytics-empty">Not enough text to extract keywords.</p>';
+    }
+
+    return `
+        <div class="keyword-tags">
+            ${keywords.map(({ word, count }) => `
+                <span class="keyword-tag">
+                    ${word}
+                    <span class="keyword-tag-count">${count}</span>
+                </span>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderAnalytics() {
+    const analyticsEl = document.getElementById('analytics');
+    const statsEl = document.getElementById('analyticsStats');
+    if (!analyticsEl || !statsEl) return;
+
+    if (!allReviews.length) {
+        analyticsEl.classList.remove('is-visible');
+        return;
+    }
+
+    analyticsEl.classList.add('is-visible');
+
+    const stats = computeReviewStats(allReviews);
+    const monthlyData = getReviewsByMonth(allReviews);
+    const keywords = getTopKeywords(allReviews);
+
+    const statCards = [
+        { label: 'Collected', value: String(stats.total) },
+        { label: 'Avg Rating', value: formatStatNumber(stats.averageRating, 2) },
+        { label: 'Positive (4-5★)', value: formatPercent(stats.positiveRate) },
+        { label: 'Recommend Rate', value: formatPercent(stats.recommendRate) },
+        { label: 'With Text', value: formatPercent(stats.withTextRate) },
+        { label: 'With Photo', value: formatPercent(stats.withPhotoRate) },
+        { label: 'Avg Words', value: formatStatNumber(stats.averageWordCount, 0) }
+    ];
+
+    statsEl.innerHTML = statCards.map(({ label, value }) => `
+        <div class="analytics-stat">
+            <div class="analytics-stat-label">${label}</div>
+            <div class="analytics-stat-value">${value}</div>
+        </div>
+    `).join('');
+
+    const distributionEl = document.getElementById('ratingDistribution');
+    const monthEl = document.getElementById('reviewsByMonth');
+    const keywordsEl = document.getElementById('topKeywords');
+
+    if (distributionEl) {
+        distributionEl.innerHTML = renderRatingBars(stats.ratingDistribution, stats.total);
+    }
+    if (monthEl) {
+        monthEl.innerHTML = renderMonthBars(monthlyData);
+    }
+    if (keywordsEl) {
+        keywordsEl.innerHTML = renderKeywordTags(keywords);
+    }
+}
+
+function renderRatingFilters() {
+    const filtersEl = document.getElementById('reviewFilters');
+    if (!filtersEl) return;
+
+    if (!allReviews.length) {
+        filtersEl.classList.add('hidden');
+        filtersEl.innerHTML = '';
+        return;
+    }
+
+    filtersEl.classList.remove('hidden');
+
+    const distribution = computeReviewStats(allReviews).ratingDistribution;
+    const chips = [
+        { label: 'All', value: null, count: allReviews.length },
+        ...[5, 4, 3, 2, 1].map((star) => ({
+            label: `${star} ★`,
+            value: star,
+            count: distribution[star] || 0
+        }))
+    ];
+
+    filtersEl.innerHTML = chips.map(({ label, value, count }) => `
+        <button
+            type="button"
+            class="filter-chip${ratingFilter === value ? ' active' : ''}"
+            data-rating="${value ?? 'all'}"
+        >
+            ${label} (${count})
+        </button>
+    `).join('');
+
+    filtersEl.querySelectorAll('.filter-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const value = chip.dataset.rating;
+            ratingFilter = value === 'all' ? null : parseInt(value, 10);
+            currentPage = 1;
+            renderPage(currentPage);
+        });
+    });
 }
 
 function formatRecommended(value) {
@@ -231,14 +397,22 @@ document.getElementById('exportBtn').addEventListener('click', exportReviews);
 
 function renderPage(page = 1) {
     const reviewsDiv = document.getElementById('reviews');
-    reviewsDiv.innerHTML = '';
+    const filteredReviews = getFilteredReviews();
 
     const start = (page - 1) * REVIEWS_PER_PAGE;
     const end = start + REVIEWS_PER_PAGE;
-    const pageReviews = allReviews.slice(start, end);
+    const pageReviews = filteredReviews.slice(start, end);
+
+    renderRatingFilters();
+    renderAnalytics();
 
     if (!pageReviews.length) {
-        reviewsDiv.innerHTML = '<p>No reviews found.</p>';
+        reviewsDiv.innerHTML = `<p style="padding: 16px;">${
+            ratingFilter ? `No ${ratingFilter}-star reviews found.` : 'No reviews found.'
+        }</p>`;
+        renderPaginationControls(page, filteredReviews.length);
+        updateLoadingTotalReviews(allReviews.length);
+        document.getElementById('exportBtn').disabled = !allReviews.length;
         return;
     }
 
@@ -276,13 +450,13 @@ function renderPage(page = 1) {
 
     tableHtml += '</tbody></table>';
     reviewsDiv.innerHTML = tableHtml;
-    renderPaginationControls(page);
+    renderPaginationControls(page, filteredReviews.length);
     updateLoadingTotalReviews(allReviews.length);
     document.getElementById('exportBtn').disabled = false;
 }
 
-function renderPaginationControls(page) {
-    const totalPages = Math.ceil(allReviews.length / REVIEWS_PER_PAGE);
+function renderPaginationControls(page, totalReviews = allReviews.length) {
+    const totalPages = Math.ceil(totalReviews / REVIEWS_PER_PAGE);
     const controlsDiv = document.getElementById('pagination-controls');
     controlsDiv.innerHTML = '';
     if (totalPages <= 1) return;
@@ -464,6 +638,7 @@ chrome.runtime.onMessage.addListener((message) => {
         document.getElementById('displayShopId').textContent = message.shopId;
         updateLoadingTotalReviews(allReviews.length);
         updateJsDataHeader(message.jsData);
+        renderAnalytics();
         const loadingMessage = document.querySelector('#loading > p');
         if (loadingMessage) {
             loadingMessage.textContent = `Fetching reviews... page ${message.page} (${allReviews.length} collected)`;
