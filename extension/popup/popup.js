@@ -213,9 +213,16 @@ async function getGoogleAccessToken() {
     });
 }
 
+function setLoginLoading(loading) {
+    loginBtn.disabled = loading;
+    loginBtn.classList.toggle('loading', loading);
+}
+
 async function handleLogin() {
     console.log('🔑 Login button clicked');
     console.log('🆔 Extension ID:', chrome.runtime.id);
+
+    setLoginLoading(true);
 
     try {
         const token = await getGoogleAccessToken();
@@ -253,6 +260,8 @@ async function handleLogin() {
     } catch (error) {
         console.error('❌ Login failed:', error);
         alert('Login failed: ' + error.message);
+    } finally {
+        setLoginLoading(false);
     }
 }
 

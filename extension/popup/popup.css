@@ -132,6 +132,34 @@ body {
     cursor: not-allowed;
 }
 
+.login-spinner {
+    display: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+#loginBtn.loading .btn-content {
+    display: none;
+}
+
+#loginBtn .btn-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#loginBtn.loading .login-spinner {
+    display: block;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 .btn-icon {
     background: transparent;
     border: none;
