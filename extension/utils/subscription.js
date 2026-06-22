@@ -11,6 +11,10 @@ const SubscriptionHelper = {
     }
 };
 
+if (typeof globalThis !== 'undefined') {
+    globalThis.SubscriptionHelper = SubscriptionHelper;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = SubscriptionHelper;
 }

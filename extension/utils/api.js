@@ -209,6 +209,10 @@ const API = {
     }
 };
 
+if (typeof globalThis !== 'undefined') {
+    globalThis.API = API;
+}
+
 // Make API available globally
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = API;

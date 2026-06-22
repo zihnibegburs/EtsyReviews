@@ -1,0 +1,13 @@
+{
+  "name": "etsy-review-scraper-extension",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:dev": "node scripts/build.mjs --no-obfuscate"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "javascript-obfuscator": "^4.1.1"
+  }
+}

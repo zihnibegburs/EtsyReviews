@@ -132,3 +132,9 @@ function getTopKeywords(reviews, limit = 12) {
         .slice(0, limit)
         .map(([word, count]) => ({ word, count }));
 }
+
+if (typeof globalThis !== 'undefined') {
+    globalThis.computeReviewStats = computeReviewStats;
+    globalThis.getReviewsByMonth = getReviewsByMonth;
+    globalThis.getTopKeywords = getTopKeywords;
+}

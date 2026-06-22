@@ -151,6 +151,10 @@ const StorageManager = {
     }
 };
 
+if (typeof globalThis !== 'undefined') {
+    globalThis.StorageManager = StorageManager;
+}
+
 // Make StorageManager available globally
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = StorageManager;

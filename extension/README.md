@@ -2,11 +2,28 @@
 
 Etsy listing sayfalarından yorum toplama, CSV export ve PRO abonelik yönetimi.
 
-## Kurulum
+## Kurulum (geliştirme)
 
 1. `chrome://extensions` → Geliştirici modu
-2. **Paketlenmemiş öğe yükle** → bu klasörü seçin
+2. **Paketlenmemiş öğe yükle** → `extension/` klasörünü seçin (kaynak kod)
 3. API production'da çalışıyor olmalı: `https://etsy-backend-u3x2.onrender.com`
+
+## Dağıtım / koruma (obfuscation)
+
+Kaynak kodun okunmasını zorlaştırmak için production build kullanın:
+
+```bash
+cd extension
+npm install
+npm run build
+```
+
+Ardından Chrome'da **`extension/dist`** klasörünü yükleyin (kaynak `extension/` değil).
+
+- `npm run build` → minify + obfuscation
+- `npm run build:dev` → sadece bundle/minify (debug için)
+
+`dist/` içinde düz `.js` kaynak dosyaları kopyalanmaz; tüm mantık bundle + obfuscate edilir.
 
 ## Google OAuth — Chrome Extension client (zorunlu)
 
