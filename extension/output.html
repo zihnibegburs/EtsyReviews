@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Etsy Reviews Export</title>
+    <link rel="icon" href="icons/icon48.png" type="image/png">
     <link rel="stylesheet" href="styles/common.css">
     <style>
         body {
@@ -31,6 +32,18 @@
             align-items: center;
             gap: 16px;
             flex-wrap: wrap;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-title img {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-md);
         }
 
         .header-top h1 {
@@ -386,7 +399,10 @@
     <div class="container">
         <div class="header">
             <div class="header-top">
-                <h1>Etsy Reviews Export</h1>
+                <div class="header-title">
+                    <img src="icons/icon48.png" alt="Etsy Reviews Export" width="40" height="40">
+                    <h1>Etsy Reviews Export</h1>
+                </div>
                 <div class="header-actions">
                     <button id="premiumBtn" class="btn-premium" style="display: none;">Get Premium Subscription</button>
                     <div class="export-controls">
