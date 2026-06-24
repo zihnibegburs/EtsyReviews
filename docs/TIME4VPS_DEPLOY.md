@@ -202,4 +202,12 @@ Internet :443
   postgres:5432
 ```
 
-Postgres dışarıya açılmaz; sadece Docker ağı içinde.
+Postgres internete açılmaz; sunucuda sadece `127.0.0.1:5432` üzerinden erişilebilir (SSH tüneli için).
+
+Mac'ten TablePlus / DBeaver:
+
+```bash
+ssh -L 5434:127.0.0.1:5432 root@SUNUCU_IP -N
+```
+
+Bağlantı: `localhost:5434`, DB `etsy_extension`, user `etsy`.
