@@ -173,6 +173,52 @@ function renderKeywordTags(keywords) {
     `;
 }
 
+function renderPremiumLockedContent(featureName) {
+    return `
+        <div class="premium-locked-content">
+            <span class="premium-lock-badge">PRO</span>
+            <p><strong>${featureName}</strong> is available on the PRO plan.</p>
+            <button type="button" class="premium-unlock-btn" data-upgrade="true">Upgrade to PRO</button>
+        </div>
+    `;
+}
+
+function bindPremiumUpgradeButtons(container) {
+    container?.querySelectorAll('[data-upgrade="true"]').forEach((btn) => {
+        btn.addEventListener('click', openCheckout);
+    });
+}
+
+function renderPremiumAnalyticsPanels(monthlyData, keywords) {
+    const monthPanel = document.getElementById('premiumPanelMonth');
+    const keywordsPanel = document.getElementById('premiumPanelKeywords');
+    const monthEl = document.getElementById('reviewsByMonth');
+    const keywordsEl = document.getElementById('topKeywords');
+    const monthBadge = document.getElementById('monthProBadge');
+    const keywordsBadge = document.getElementById('keywordsProBadge');
+
+    if (!monthEl || !keywordsEl) return;
+
+    if (isProUser) {
+        monthPanel?.classList.remove('is-locked');
+        keywordsPanel?.classList.remove('is-locked');
+        monthBadge?.classList.add('hidden');
+        keywordsBadge?.classList.add('hidden');
+        updateMonthBars(monthEl, monthlyData);
+        keywordsEl.innerHTML = renderKeywordTags(keywords);
+        return;
+    }
+
+    monthPanel?.classList.add('is-locked');
+    keywordsPanel?.classList.add('is-locked');
+    monthBadge?.classList.remove('hidden');
+    keywordsBadge?.classList.remove('hidden');
+    monthEl.innerHTML = renderPremiumLockedContent('Reviews by Month');
+    keywordsEl.innerHTML = renderPremiumLockedContent('Top Keywords');
+    bindPremiumUpgradeButtons(monthPanel);
+    bindPremiumUpgradeButtons(keywordsPanel);
+}
+
 function renderAnalytics() {
     const analyticsEl = document.getElementById('analytics');
     const statsEl = document.getElementById('analyticsStats');
@@ -207,18 +253,12 @@ function renderAnalytics() {
     `).join('');
 
     const distributionEl = document.getElementById('ratingDistribution');
-    const monthEl = document.getElementById('reviewsByMonth');
-    const keywordsEl = document.getElementById('topKeywords');
 
     if (distributionEl) {
         distributionEl.innerHTML = renderRatingBars(stats.ratingDistribution, stats.total);
     }
-    if (monthEl) {
-        updateMonthBars(monthEl, monthlyData);
-    }
-    if (keywordsEl) {
-        keywordsEl.innerHTML = renderKeywordTags(keywords);
-    }
+
+    renderPremiumAnalyticsPanels(monthlyData, keywords);
 }
 
 function renderRatingFilters() {

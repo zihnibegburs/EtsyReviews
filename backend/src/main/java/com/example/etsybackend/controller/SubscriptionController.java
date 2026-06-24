@@ -125,9 +125,18 @@ public class SubscriptionController {
     }
 
     private boolean hasProAccess(Subscription subscription) {
-        return subscription.getStatus() == com.example.etsybackend.model.SubscriptionStatus.ACTIVE
-                || subscription.getStatus() == com.example.etsybackend.model.SubscriptionStatus.TRIAL
-                || subscription.getStatus() == com.example.etsybackend.model.SubscriptionStatus.PAST_DUE;
+        com.example.etsybackend.model.SubscriptionStatus status = subscription.getStatus();
+        if (status == com.example.etsybackend.model.SubscriptionStatus.ACTIVE
+                || status == com.example.etsybackend.model.SubscriptionStatus.TRIAL
+                || status == com.example.etsybackend.model.SubscriptionStatus.PAST_DUE) {
+            return true;
+        }
+        if (!Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd())
+                && subscription.getCancelledAt() == null) {
+            return false;
+        }
+        return subscription.getCurrentPeriodEnd() != null
+                && subscription.getCurrentPeriodEnd().isAfter(java.time.LocalDateTime.now());
     }
 
     private SubscriptionDTO toDto(Subscription subscription) {

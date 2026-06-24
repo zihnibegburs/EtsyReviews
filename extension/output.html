@@ -678,6 +678,73 @@
             color: var(--color-text-muted);
         }
 
+        .analytics-panel-premium.is-locked {
+            position: relative;
+        }
+
+        .premium-locked-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 10px;
+            min-height: 140px;
+            padding: 20px 12px;
+            background: linear-gradient(180deg, var(--color-primary-light) 0%, var(--color-surface) 100%);
+            border: 1px dashed var(--color-primary);
+            border-radius: var(--radius-md);
+        }
+
+        .premium-lock-badge {
+            display: inline-block;
+            background: var(--color-primary);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            padding: 3px 10px;
+            border-radius: var(--radius-full);
+        }
+
+        .premium-locked-content p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--color-text-secondary);
+            line-height: 1.5;
+            max-width: 220px;
+        }
+
+        .premium-unlock-btn {
+            margin-top: 4px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: var(--radius-md);
+            background: var(--color-primary);
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition);
+        }
+
+        .premium-unlock-btn:hover {
+            background: var(--color-primary-hover);
+        }
+
+        .analytics-panel-premium h3 .pro-only-badge {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 2px 7px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: white;
+            background: var(--color-primary);
+            border-radius: var(--radius-full);
+            vertical-align: middle;
+        }
+
         .review-filters {
             display: flex;
             flex-wrap: wrap;
@@ -774,12 +841,12 @@
                     <h3>Rating Distribution</h3>
                     <div id="ratingDistribution"></div>
                 </div>
-                <div class="analytics-panel">
-                    <h3>Reviews by Month</h3>
+                <div class="analytics-panel analytics-panel-premium" id="premiumPanelMonth">
+                    <h3>Reviews by Month<span class="pro-only-badge hidden" id="monthProBadge">PRO</span></h3>
                     <div id="reviewsByMonth"></div>
                 </div>
-                <div class="analytics-panel">
-                    <h3>Top Keywords</h3>
+                <div class="analytics-panel analytics-panel-premium" id="premiumPanelKeywords">
+                    <h3>Top Keywords<span class="pro-only-badge hidden" id="keywordsProBadge">PRO</span></h3>
                     <div id="topKeywords"></div>
                 </div>
             </div>

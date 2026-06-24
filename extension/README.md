@@ -6,7 +6,7 @@ Etsy listing sayfalarından yorum toplama, CSV export ve PRO abonelik yönetimi.
 
 1. `chrome://extensions` → Geliştirici modu
 2. **Paketlenmemiş öğe yükle** → `extension/` klasörünü seçin (kaynak kod)
-3. API production'da çalışıyor olmalı: `https://etsy-backend-u3x2.onrender.com`
+3. API production'da çalışıyor olmalı: `https://api.etsyfetcher.shop`
 
 ## Dağıtım / koruma (obfuscation)
 

@@ -37,6 +37,7 @@ public class SecurityConfig {
                                 "/",
                                 "/health",
                                 "/api/auth/**",
+                                "/api/admin/**",
                                 "/api/lemonsqueezy/config",
                                 "/api/lemonsqueezy/webhook",
                                 "/checkout/success",
@@ -61,7 +62,8 @@ public class SecurityConfig {
         configuration.setAllowedOriginPatterns(List.of(
                 "chrome-extension://*",
                 "http://localhost:*",
-                "https://*.onrender.com"
+                "https://*.onrender.com",
+                "https://api.etsyfetcher.shop"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

@@ -154,11 +154,12 @@ public class LemonSqueezyService {
             throw new RuntimeException("No Lemon Squeezy subscription found");
         }
 
-        if (!Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd())) {
+        if (!Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd())
+                && subscription.getCancelledAt() == null) {
             throw new RuntimeException("Subscription is not scheduled for cancellation");
         }
 
-        if (!isBlockingStatus(subscription.getStatus())) {
+        if (!hasProAccess(subscription)) {
             throw new RuntimeException("Subscription cannot be reactivated");
         }
 
@@ -582,7 +583,9 @@ public class LemonSqueezyService {
             subscription.setCurrentPeriodEnd(parseDateTime(endsAt));
         }
 
-        subscription.setCancelAtPeriodEnd(cancelled && isBlockingStatus(subscription.getStatus()));
+        subscription.setCancelAtPeriodEnd(
+                cancelled && subscription.getStatus() != SubscriptionStatus.CANCELLED
+        );
 
         if (cancelled) {
             if (subscription.getCancelledAt() == null) {
@@ -594,8 +597,12 @@ public class LemonSqueezyService {
     }
 
     private SubscriptionStatus mapLemonSqueezyStatus(String status, boolean cancelled) {
-        if ("expired".equals(status) || "cancelled".equals(status)) {
+        if ("expired".equals(status)) {
             return SubscriptionStatus.CANCELLED;
+        }
+        // Lemon Squeezy keeps status "cancelled" during the grace period; access continues until ends_at.
+        if ("cancelled".equals(status)) {
+            return SubscriptionStatus.ACTIVE;
         }
         return switch (status) {
             case "active" -> SubscriptionStatus.ACTIVE;
@@ -640,7 +647,7 @@ public class LemonSqueezyService {
         }
 
         Subscription subscription = subscriptionOpt.get();
-        if (isBlockingStatus(subscription.getStatus())) {
+        if (hasProAccess(subscription)) {
             throw new ActiveSubscriptionException("You already have an active subscription");
         }
     }
@@ -649,5 +656,21 @@ public class LemonSqueezyService {
         return status == SubscriptionStatus.ACTIVE
                 || status == SubscriptionStatus.TRIAL
                 || status == SubscriptionStatus.PAST_DUE;
+    }
+
+    private boolean hasProAccess(Subscription subscription) {
+        if (isBlockingStatus(subscription.getStatus())) {
+            return true;
+        }
+        return isInCancelGracePeriod(subscription);
+    }
+
+    private boolean isInCancelGracePeriod(Subscription subscription) {
+        if (!Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd())
+                && subscription.getCancelledAt() == null) {
+            return false;
+        }
+        LocalDateTime periodEnd = subscription.getCurrentPeriodEnd();
+        return periodEnd != null && periodEnd.isAfter(LocalDateTime.now());
     }
 }

@@ -74,3 +74,95 @@ button {
 ::-webkit-scrollbar-thumb:hover {
     background: #9CA3AF;
 }
+
+/* Plan comparison & free limit callouts */
+.free-limit-callout {
+    background: var(--color-warning-bg);
+    border: 1px solid #FCD34D;
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-warning);
+}
+
+.free-limit-callout strong {
+    color: #92400E;
+    font-weight: 700;
+}
+
+.free-limit-callout .limit-number {
+    display: inline-block;
+    background: #F59E0B;
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 1px 8px;
+    border-radius: var(--radius-sm);
+    margin: 0 2px;
+}
+
+.plan-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.plan-comparison-col {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    box-shadow: var(--shadow-sm);
+}
+
+.plan-comparison-col.pro {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+
+.plan-comparison-col h4 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.plan-comparison-col.free h4 {
+    color: var(--color-text-muted);
+}
+
+.plan-comparison-col.pro h4 {
+    color: var(--color-primary);
+}
+
+.plan-comparison-col ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.plan-comparison-col li {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    padding: 5px 0;
+    border-bottom: 1px solid var(--color-border-light);
+    line-height: 1.45;
+}
+
+.plan-comparison-col li:last-child {
+    border-bottom: none;
+}
+
+.plan-comparison-col li.limit-highlight {
+    color: var(--color-warning);
+    font-weight: 600;
+}
+
+.plan-comparison-col li.unlimited {
+    color: var(--color-success);
+    font-weight: 600;
+}

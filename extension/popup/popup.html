@@ -48,7 +48,13 @@
                         <svg width="12" height="12" viewBox="0 0 24 24">
                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                         </svg>
-                        <span>Pro features</span>
+                        <span>Free: up to 50 reviews</span>
+                    </div>
+                    <div class="feature-item">
+                        <svg width="12" height="12" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>PRO: unlimited reviews</span>
                     </div>
                 </div>
             </div>
@@ -147,7 +153,7 @@
                             </div>
 
                             <div class="actions">
-                                <button id="fetchReviews" class="btn btn-primary btn-large" disabled title="FREE: 50 reviews. PRO: unlimited">
+                                <button id="fetchReviews" class="btn btn-primary btn-large" disabled title="FREE plan: max 50 reviews per fetch. PRO: unlimited.">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
                                     </svg>
@@ -158,6 +164,12 @@
                                         <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                                     </svg>
                                 </button>
+                            </div>
+
+                            <div id="homeFreeLimitNotice" class="free-limit-callout">
+                                <strong>FREE plan limit:</strong> You can fetch and export up to
+                                <span class="limit-number">50</span> reviews per listing.
+                                Upgrade to PRO for unlimited reviews.
                             </div>
 
                             <div class="subscription-info">
@@ -173,7 +185,33 @@
                     <div id="pagePurchase" class="tab-page">
                         <div class="content-section">
                             <h2>Upgrade to PRO</h2>
-                            <p class="page-desc">Unlimited exports and advanced features</p>
+                            <p class="page-desc">Remove the 50-review limit and unlock unlimited exports</p>
+
+                            <div class="free-limit-callout">
+                                <strong>On the FREE plan</strong>, fetching stops at
+                                <span class="limit-number">50</span> reviews — even if the listing has hundreds more.
+                                PRO removes this cap entirely.
+                            </div>
+
+                            <div class="plan-comparison">
+                                <div class="plan-comparison-col free">
+                                    <h4>Free</h4>
+                                    <ul>
+                                        <li class="limit-highlight">Max 50 reviews per fetch</li>
+                                        <li>CSV &amp; XLSX export</li>
+                                        <li>Basic analytics</li>
+                                    </ul>
+                                </div>
+                                <div class="plan-comparison-col pro">
+                                    <h4>PRO</h4>
+                                    <ul>
+                                        <li class="unlimited">Unlimited reviews</li>
+                                        <li>Full export — no cap</li>
+                                        <li>Advanced analytics</li>
+                                        <li>Priority support</li>
+                                    </ul>
+                                </div>
+                            </div>
 
                             <div class="subscription-status-card">
                                 <h3>Current Plan</h3>
@@ -188,7 +226,7 @@
                                     <h3>Monthly</h3>
                                     <div class="price">$8<span>/mo</span></div>
                                     <ul class="features-list">
-                                        <li>Unlimited review exports</li>
+                                        <li>Unlimited reviews (no 50 cap)</li>
                                         <li>Priority support</li>
                                         <li>Advanced analytics</li>
                                         <li>No watermarks</li>
@@ -199,13 +237,13 @@
                                 <div class="pricing-card featured">
                                     <div class="badge">Best Value</div>
                                     <h3>Yearly</h3>
-                                    <div class="price">$70<span>/yr</span></div>
-                                    <div class="savings">Save $26</div>
+                                    <div class="price">$72<span>/yr</span></div>
+                                    <div class="savings">Save $24</div>
                                     <ul class="features-list">
                                         <li>Everything in Monthly</li>
+                                        <li>Unlimited reviews — no 50 limit</li>
                                         <li>2 months free</li>
                                         <li>Early access</li>
-                                        <li>Priority support</li>
                                     </ul>
                                     <button id="buyYearly" class="btn btn-primary">Get Yearly</button>
                                 </div>
@@ -217,26 +255,43 @@
                     <div id="pageFAQ" class="tab-page">
                         <div class="content-section">
                             <h2>FAQ</h2>
-                            <p class="page-desc">Common questions</p>
+                            <p class="page-desc">Plans, limits, and how it works</p>
+
+                            <div class="faq-item faq-item-highlight">
+                                <h3>What is the FREE plan limit?</h3>
+                                <p>
+                                    <strong>FREE users can fetch and export up to 50 reviews per listing.</strong>
+                                    Once the limit is reached, fetching stops automatically — even if the shop has more reviews.
+                                    Upgrade to PRO to remove this cap and collect every review.
+                                </p>
+                            </div>
 
                             <div class="faq-item">
                                 <h3>How do I scrape reviews?</h3>
-                                <p>Go to any Etsy listing page, open this extension, and click "Fetch Reviews".</p>
+                                <p>Go to any Etsy listing page, open this extension, and click "Fetch Reviews". FREE accounts collect up to 50 reviews; PRO accounts have no limit.</p>
                             </div>
 
                             <div class="faq-item">
                                 <h3>Can I export reviews?</h3>
-                                <p>Yes. After fetching reviews, export all collected reviews as CSV or XLSX for use in Excel or other tools.</p>
+                                <p>Yes. After fetching, export your collected reviews as CSV or XLSX. FREE exports include up to 50 reviews; PRO exports are unlimited.</p>
                             </div>
 
                             <div class="faq-item">
                                 <h3>What's in the PRO plan?</h3>
-                                <p>Unlimited exports, priority support, advanced analytics, no watermarks, and early access to new features.</p>
+                                <p>
+                                    PRO removes the 50-review limit, so you can fetch and export every review on a listing.
+                                    You also get advanced analytics, priority support, no watermarks, and early access to new features.
+                                </p>
+                            </div>
+
+                            <div class="faq-item">
+                                <h3>What happens when I hit 50 reviews on FREE?</h3>
+                                <p>Fetching stops at 50 reviews and you'll see a prompt to upgrade. Your collected reviews can still be exported. Upgrade to PRO anytime to continue past the limit on future fetches.</p>
                             </div>
 
                             <div class="faq-item">
                                 <h3>How do I cancel?</h3>
-                                <p>Cancel anytime from Settings or contact support.</p>
+                                <p>Cancel anytime from Settings. Your PRO access stays active until the end of the billing period, then you'll return to the FREE plan (50 reviews per fetch).</p>
                             </div>
 
                             <div class="faq-item">

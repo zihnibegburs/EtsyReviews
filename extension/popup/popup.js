@@ -14,6 +14,7 @@ const displayStatus = document.getElementById('displayStatus');
 const fetchReviews = document.getElementById('fetchReviews');
 const refreshBtn = document.getElementById('refreshBtn');
 const statusBadge = document.getElementById('statusBadge');
+const homeFreeLimitNotice = document.getElementById('homeFreeLimitNotice');
 
 // Tab Elements
 const tabHome = document.getElementById('tabHome');
@@ -509,14 +510,17 @@ async function loadSubscriptionData() {
         if (API.hasProAccess(subscription)) {
             statusBadge.textContent = 'PRO';
             statusBadge.className = 'status-badge active';
+            homeFreeLimitNotice?.classList.add('hidden');
         } else {
             statusBadge.textContent = 'FREE';
             statusBadge.className = 'status-badge inactive';
+            homeFreeLimitNotice?.classList.remove('hidden');
         }
     } catch (error) {
         console.error('❌ Failed to load subscription:', error);
         statusBadge.textContent = 'FREE';
         statusBadge.className = 'status-badge inactive';
+        homeFreeLimitNotice?.classList.remove('hidden');
     }
 }
 

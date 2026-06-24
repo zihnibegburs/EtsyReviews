@@ -18,7 +18,7 @@
   ],
   "host_permissions": [
     "http://localhost:8081/*",
-    "https://etsy-backend-u3x2.onrender.com/*",
+    "https://api.etsyfetcher.shop/*",
     "https://www.googleapis.com/*",
     "https://*.lemonsqueezy.com/*",
     "*://www.etsy.com/*"

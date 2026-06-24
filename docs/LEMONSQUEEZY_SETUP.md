@@ -27,7 +27,7 @@ Uzantı → POST /api/lemonsqueezy/checkout → Lemon Squeezy hosted checkout
 1. **Products** → yeni ürün: `Etsy Reviews PRO`
 2. İki **subscription variant** ekle:
    - Monthly: $8/month
-   - Yearly: $70/year
+   - Yearly: $72/year
 3. **Store ID** ve her variant'ın **ID**'sini kopyala
 
 ---
@@ -79,7 +79,7 @@ ngrok http 8081
 | Events | `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_expired`, `subscription_resumed`, `subscription_payment_success`, `order_created` |
 | Signing secret | Oluşan secret → `LEMONSQUEEZY_WEBHOOK_SECRET` |
 
-Production: `https://etsy-backend-u3x2.onrender.com/api/lemonsqueezy/webhook`
+Production: `https://api.etsyfetcher.shop/api/lemonsqueezy/webhook`
 
 ---
 

@@ -520,6 +520,16 @@ body {
     align-items: center;
 }
 
+.popup-content .free-limit-callout,
+.content-section .free-limit-callout {
+    margin: 0 14px 14px;
+    font-size: 12px;
+}
+
+.content-section .plan-comparison {
+    padding: 0 14px;
+}
+
 .subscription-status {
     display: flex;
     align-items: center;
@@ -643,6 +653,20 @@ body {
 .faq-item {
     padding: 14px;
     margin-bottom: 8px;
+}
+
+.faq-item-highlight {
+    background: var(--color-warning-bg);
+    border: 1px solid #FCD34D;
+    border-radius: var(--radius-md);
+}
+
+.faq-item-highlight h3 {
+    color: #92400E;
+}
+
+.faq-item-highlight p {
+    color: #78350F;
 }
 
 .faq-item h3 {

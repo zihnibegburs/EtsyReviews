@@ -15,7 +15,7 @@ jobs:
         env:
           HEALTH_URL: ${{ vars.RENDER_HEALTH_URL }}
         run: |
-          URL="${HEALTH_URL:-https://etsy-backend-u3x2.onrender.com/}"
+          URL="${HEALTH_URL:-https://api.etsyfetcher.shop/}"
           echo "Pinging $URL at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           for attempt in 1 2 3; do
