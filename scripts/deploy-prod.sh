@@ -15,11 +15,9 @@ if [[ ! -f .env ]]; then
 fi
 
 # shellcheck disable=SC1091
-set -a
-source .env
-set +a
+API_DOMAIN="$(grep -E '^API_DOMAIN=' .env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
 
-if [[ -z "${API_DOMAIN:-}" ]]; then
+if [[ -z "${API_DOMAIN}" ]]; then
   echo "Hata: .env içinde API_DOMAIN tanımlı değil."
   exit 1
 fi
