@@ -31,3 +31,5 @@ stripe.cancel-url=http://localhost:8081/checkout/cancel
 
 # Swagger
 springdoc.api-docs.path=/api-docs
+swagger.username=admin
+swagger.password=change-me-swagger-password
