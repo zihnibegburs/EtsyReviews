@@ -1,0 +1,93 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: etsy-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - etsy-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: etsy-postgres
+    environment:
+      POSTGRES_DB: etsy_extension
+      POSTGRES_USER: ${POSTGRES_USER:-etsy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c max_connections=30
+      -c work_mem=4MB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-etsy} -d etsy_extension"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    networks:
+      - etsy-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: etsy-backend
+    environment:
+      PORT: 8081
+      DATABASE_URL: jdbc:postgresql://postgres:5432/etsy_extension
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-etsy}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID in .env}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      LEMONSQUEEZY_API_KEY: ${LEMONSQUEEZY_API_KEY}
+      LEMONSQUEEZY_STORE_ID: ${LEMONSQUEEZY_STORE_ID}
+      LEMONSQUEEZY_WEBHOOK_SECRET: ${LEMONSQUEEZY_WEBHOOK_SECRET}
+      LEMONSQUEEZY_VARIANT_ID_MONTHLY: ${LEMONSQUEEZY_VARIANT_ID_MONTHLY}
+      LEMONSQUEEZY_VARIANT_ID_YEARLY: ${LEMONSQUEEZY_VARIANT_ID_YEARLY}
+      LEMONSQUEEZY_SUCCESS_URL: ${LEMONSQUEEZY_SUCCESS_URL}
+      LEMONSQUEEZY_CANCEL_URL: ${LEMONSQUEEZY_CANCEL_URL}
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    networks:
+      - etsy-network
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  etsy-network:
+    driver: bridge

@@ -1,0 +1,6 @@
+# Domain — .env içindeki API_DOMAIN ile aynı olmalı
+# Örnek: api.etsyfetcher.shop
+{$API_DOMAIN} {
+    encode gzip
+    reverse_proxy backend:8081
+}
