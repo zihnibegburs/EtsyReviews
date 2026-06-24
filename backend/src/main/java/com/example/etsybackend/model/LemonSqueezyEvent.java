@@ -8,30 +8,31 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "stripe_payments")
+@Table(name = "lemonsqueezy_events")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class StripePayment {
+public class LemonSqueezyEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long userId;
+    @Column(unique = true, nullable = false)
+    private String eventId;
 
-    @Column(unique = true)
-    private String stripeSessionId;
+    @Column(nullable = false)
+    private String eventType;
 
-    private String stripePaymentIntentId;
-    private String stripeSubscriptionId;
-    private String stripeCustomerId;
-    private String priceId;
-    private Long amountTotal;
-    private String currency;
-    private String status;
-    private String customerEmail;
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String payload;
+
+    private boolean processed;
+
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
 
     private LocalDateTime createdAt;
+    private LocalDateTime processedAt;
 
     @PrePersist
     protected void onCreate() {

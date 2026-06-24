@@ -29,7 +29,7 @@ if ! gh repo view "${GITHUB_USER}/${REPO_NAME}" >/dev/null 2>&1; then
   echo "Repo oluşturuluyor: ${GITHUB_USER}/${REPO_NAME}"
   gh repo create "${GITHUB_USER}/${REPO_NAME}" \
     --public \
-    --description "Etsy review scraper Chrome extension with Spring Boot API and Stripe subscriptions"
+    --description "Etsy review scraper Chrome extension with Spring Boot API and Lemon Squeezy subscriptions"
 fi
 
 echo "Push ediliyor..."

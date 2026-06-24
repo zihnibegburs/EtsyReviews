@@ -11,7 +11,7 @@ const StorageManager = {
     }
 };
 
-let stripeConfig = null;
+let billingConfig = null;
 
 function showCheckoutError(message) {
     const errorEl = document.getElementById('checkoutError');
@@ -31,53 +31,71 @@ function clearCheckoutError() {
     errorEl.classList.add('hidden');
 }
 
-function getLocalStripeConfig() {
-    if (API_CONFIG.STRIPE_PRICE_ID_MONTHLY && API_CONFIG.STRIPE_PRICE_ID_YEARLY) {
+function getLocalBillingConfig() {
+    if (API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY && API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY) {
         return {
-            priceIdMonthly: API_CONFIG.STRIPE_PRICE_ID_MONTHLY,
-            priceIdYearly: API_CONFIG.STRIPE_PRICE_ID_YEARLY
+            variantIdMonthly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY,
+            variantIdYearly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY
         };
     }
     return null;
 }
 
-async function fetchStripeConfigFromApi() {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error(
+                `Backend did not respond in time. Is it running at ${API_CONFIG.BASE_URL}?`
+            );
+        }
+        throw new Error(`Could not reach backend at ${API_CONFIG.BASE_URL}`);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+async function fetchBillingConfigFromApi() {
     const token = await StorageManager.getToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-    const response = await fetch(`${API_CONFIG.BASE_URL}/stripe/config`, { headers });
+    const response = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/lemonsqueezy/config`, { headers });
     if (!response.ok) {
         return null;
     }
 
     const data = await response.json();
-    if (!data?.priceIdMonthly || !data?.priceIdYearly) {
+    if (!data?.variantIdMonthly || !data?.variantIdYearly) {
         return null;
     }
 
     return data;
 }
 
-async function loadStripeConfig() {
-    if (stripeConfig) return stripeConfig;
+async function loadBillingConfig() {
+    if (billingConfig) return billingConfig;
 
     try {
-        const remoteConfig = await fetchStripeConfigFromApi();
+        const remoteConfig = await fetchBillingConfigFromApi();
         if (remoteConfig) {
-            stripeConfig = remoteConfig;
-            return stripeConfig;
+            billingConfig = remoteConfig;
+            return billingConfig;
         }
     } catch (error) {
-        console.warn('Stripe config API unavailable:', error.message);
+        console.warn('Billing config API unavailable:', error.message);
     }
 
-    const localConfig = getLocalStripeConfig();
+    const localConfig = getLocalBillingConfig();
     if (localConfig) {
-        stripeConfig = localConfig;
-        return stripeConfig;
+        billingConfig = localConfig;
+        return billingConfig;
     }
 
-    throw new Error('Failed to load Stripe config. Please try again later.');
+    throw new Error('Failed to load billing config. Please try again later.');
 }
 
 async function loadStatus() {
@@ -116,9 +134,9 @@ async function loadStatus() {
                 }
                 statusEl.style.color = '#27ae60';
 
-                const config = await loadStripeConfig();
-                const isMonthly = subscription.planId === config.priceIdMonthly;
-                const isYearly = subscription.planId === config.priceIdYearly;
+                const config = await loadBillingConfig();
+                const isMonthly = subscription.planId === config.variantIdMonthly;
+                const isYearly = subscription.planId === config.variantIdYearly;
 
                 if (isYearly || isPendingCancel) {
                     setCheckoutButtonsDisabled(true, 'You already have PRO');
@@ -166,7 +184,7 @@ function setCheckoutButtonsDisabled(disabled, label = null) {
     }
 }
 
-async function openStripeCheckout(priceId) {
+async function openCheckout(variantId) {
     const loadingDiv = document.getElementById('loadingMessage');
     loadingDiv.classList.remove('hidden');
     clearCheckoutError();
@@ -177,16 +195,21 @@ async function openStripeCheckout(priceId) {
             throw new Error('Please login in the extension first, then try again.');
         }
 
-        const response = await fetch(`${API_CONFIG.BASE_URL}/stripe/checkout`, {
+        const response = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/lemonsqueezy/checkout`, {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ priceId })
+            body: JSON.stringify({ variantId })
         });
 
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch {
+            throw new Error(`Checkout failed (HTTP ${response.status})`);
+        }
         if (response.status === 409) {
             throw new Error(data.error || 'You already have an active subscription.');
         }
@@ -203,7 +226,7 @@ async function openStripeCheckout(priceId) {
     }
 }
 
-async function upgradeSubscription(priceId) {
+async function upgradeSubscription(variantId) {
     const token = await StorageManager.getToken();
     if (!token) {
         throw new Error('Please login in the extension first, then try again.');
@@ -215,7 +238,7 @@ async function upgradeSubscription(priceId) {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ priceId })
+        body: JSON.stringify({ variantId })
     });
 
     const data = await response.json();
@@ -244,23 +267,23 @@ async function startCheckout(plan) {
         : 'Opening checkout...';
 
     try {
-        const config = await loadStripeConfig();
-        const priceId = plan === 'yearly' ? config.priceIdYearly : config.priceIdMonthly;
+        const config = await loadBillingConfig();
+        const variantId = plan === 'yearly' ? config.variantIdYearly : config.variantIdMonthly;
 
         if (plan === 'yearly' && activeBtn.dataset.action === 'upgrade') {
             const confirmed = confirm(
-                'Upgrade to the yearly plan?\n\nStripe will apply prorated credit from your current monthly plan.'
+                'Upgrade to the yearly plan?\n\nLemon Squeezy will apply prorated credit from your current monthly plan.'
             );
             if (!confirmed) {
                 return;
             }
-            await upgradeSubscription(priceId);
+            await upgradeSubscription(variantId);
             await loadStatus();
             alert('Upgraded to yearly plan successfully.');
             return;
         }
 
-        await openStripeCheckout(priceId);
+        await openCheckout(variantId);
     } catch (error) {
         console.error('Checkout error:', error);
         showCheckoutError(error.message || 'Failed to open checkout');
@@ -286,10 +309,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadStatus();
 
     try {
-        await loadStripeConfig();
+        await loadBillingConfig();
         clearCheckoutError();
     } catch (error) {
-        console.warn('Stripe config preload failed:', error.message);
+        console.warn('Billing config preload failed:', error.message);
         showCheckoutError('Could not load billing config. Click a plan to retry.');
     }
 

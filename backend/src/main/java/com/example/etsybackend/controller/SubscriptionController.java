@@ -4,8 +4,7 @@ import com.example.etsybackend.dto.SubscriptionDTO;
 import com.example.etsybackend.model.Subscription;
 import com.example.etsybackend.repository.SubscriptionRepository;
 import com.example.etsybackend.repository.UserRepository;
-import com.example.etsybackend.service.StripeService;
-import com.stripe.exception.StripeException;
+import com.example.etsybackend.service.LemonSqueezyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,16 +21,16 @@ import java.util.Map;
 public class SubscriptionController {
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
-    private final StripeService stripeService;
+    private final LemonSqueezyService lemonSqueezyService;
 
     public SubscriptionController(
             SubscriptionRepository subscriptionRepository,
             UserRepository userRepository,
-            StripeService stripeService
+            LemonSqueezyService lemonSqueezyService
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
-        this.stripeService = stripeService;
+        this.lemonSqueezyService = lemonSqueezyService;
     }
 
     @GetMapping("/me")
@@ -52,7 +51,7 @@ public class SubscriptionController {
     }
 
     @PostMapping("/cancel")
-    @Operation(summary = "Cancel Stripe subscription", description = "Cancels at end of current billing period")
+    @Operation(summary = "Cancel subscription", description = "Cancels at end of current billing period")
     public ResponseEntity<?> cancelSubscription(Authentication authentication) {
         String email = authentication.getName();
         Long userId = userRepository.findByEmail(email)
@@ -60,16 +59,15 @@ public class SubscriptionController {
                 .getId();
 
         try {
-            Subscription subscription = stripeService.cancelSubscription(userId);
+            Subscription subscription = lemonSqueezyService.cancelSubscription(userId);
             return ResponseEntity.ok(toDto(subscription));
-        } catch (StripeException e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to cancel subscription: " + e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
     @PostMapping("/reactivate")
-    @Operation(summary = "Reactivate Stripe subscription", description = "Removes scheduled cancellation before period end")
+    @Operation(summary = "Reactivate subscription", description = "Removes scheduled cancellation before period end")
     public ResponseEntity<?> reactivateSubscription(Authentication authentication) {
         String email = authentication.getName();
         Long userId = userRepository.findByEmail(email)
@@ -77,11 +75,8 @@ public class SubscriptionController {
                 .getId();
 
         try {
-            Subscription subscription = stripeService.reactivateSubscription(userId);
+            Subscription subscription = lemonSqueezyService.reactivateSubscription(userId);
             return ResponseEntity.ok(toDto(subscription));
-        } catch (StripeException e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to reactivate subscription: " + e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -98,17 +93,14 @@ public class SubscriptionController {
                 .orElseThrow(() -> new RuntimeException("User not found"))
                 .getId();
 
-        String priceId = request.get("priceId");
-        if (priceId == null || priceId.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "priceId is required"));
+        String variantId = request.get("variantId");
+        if (variantId == null || variantId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "variantId is required"));
         }
 
         try {
-            Subscription subscription = stripeService.upgradeSubscription(userId, priceId);
+            Subscription subscription = lemonSqueezyService.upgradeSubscription(userId, variantId);
             return ResponseEntity.ok(toDto(subscription));
-        } catch (StripeException e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Failed to upgrade subscription: " + e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -148,4 +140,3 @@ public class SubscriptionController {
         return dto;
     }
 }
-

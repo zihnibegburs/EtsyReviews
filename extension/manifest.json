@@ -17,9 +17,10 @@
     "scripting"
   ],
   "host_permissions": [
+    "http://localhost:8081/*",
     "https://etsy-backend-u3x2.onrender.com/*",
     "https://www.googleapis.com/*",
-    "https://checkout.stripe.com/*",
+    "https://*.lemonsqueezy.com/*",
     "*://www.etsy.com/*"
   ],
   "action": {

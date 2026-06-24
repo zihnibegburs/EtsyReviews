@@ -541,25 +541,25 @@ tabFAQ.addEventListener('click', () => showTab('faq'));
 tabSettings.addEventListener('click', () => showTab('settings'));
 
 // =============== PURCHASE PAGE ===============
-async function getStripePriceConfig() {
+async function getBillingConfig() {
     try {
-        const response = await fetch(`${API.BASE_URL}/stripe/config`, {
+        const response = await fetch(`${API.BASE_URL}/lemonsqueezy/config`, {
             headers: await API.getHeaders(true)
         });
         if (response.ok) {
             const data = await response.json();
-            if (data?.priceIdMonthly && data?.priceIdYearly) {
+            if (data?.variantIdMonthly && data?.variantIdYearly) {
                 return data;
             }
         }
     } catch (error) {
-        console.warn('Could not load Stripe config from API:', error.message);
+        console.warn('Could not load billing config from API:', error.message);
     }
 
-    if (API_CONFIG.STRIPE_PRICE_ID_MONTHLY && API_CONFIG.STRIPE_PRICE_ID_YEARLY) {
+    if (API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY && API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY) {
         return {
-            priceIdMonthly: API_CONFIG.STRIPE_PRICE_ID_MONTHLY,
-            priceIdYearly: API_CONFIG.STRIPE_PRICE_ID_YEARLY
+            variantIdMonthly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY,
+            variantIdYearly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY
         };
     }
 
@@ -572,15 +572,15 @@ async function loadPurchasePageData() {
     try {
         const [subscription, priceConfig] = await Promise.all([
             API.getSubscription(),
-            getStripePriceConfig()
+            getBillingConfig()
         ]);
         const hasActive = API.hasProAccess(subscription);
         const isPendingCancel = API.isPendingCancel(subscription);
         const periodEnd = formatSubscriptionDate(subscription?.currentPeriodEnd);
-        const monthlyPriceId = priceConfig?.priceIdMonthly;
-        const yearlyPriceId = priceConfig?.priceIdYearly;
-        const isMonthly = hasActive && monthlyPriceId && subscription.planId === monthlyPriceId;
-        const isYearly = hasActive && yearlyPriceId && subscription.planId === yearlyPriceId;
+        const monthlyVariantId = priceConfig?.variantIdMonthly;
+        const yearlyVariantId = priceConfig?.variantIdYearly;
+        const isMonthly = hasActive && monthlyVariantId && subscription.planId === monthlyVariantId;
+        const isYearly = hasActive && yearlyVariantId && subscription.planId === yearlyVariantId;
 
         if (hasActive) {
             currentPlan.textContent = 'PRO';
@@ -674,7 +674,7 @@ buyYearly.addEventListener('click', async () => {
 
     if (buyYearly.dataset.action === 'upgrade') {
         const confirmed = confirm(
-            'Upgrade to the yearly plan?\n\nStripe will apply prorated credit from your current monthly plan.'
+            'Upgrade to the yearly plan?\n\nLemon Squeezy will apply prorated credit from your current monthly plan.'
         );
         if (!confirmed) {
             return;
@@ -685,12 +685,12 @@ buyYearly.addEventListener('click', async () => {
         buyYearly.textContent = 'Upgrading...';
 
         try {
-            const priceConfig = await getStripePriceConfig();
-            if (!priceConfig?.priceIdYearly) {
-                throw new Error('Could not load yearly plan price');
+            const priceConfig = await getBillingConfig();
+            if (!priceConfig?.variantIdYearly) {
+                throw new Error('Could not load yearly plan variant');
             }
 
-            await API.upgradeSubscription(priceConfig.priceIdYearly);
+            await API.upgradeSubscription(priceConfig.variantIdYearly);
             await loadPurchasePageData();
             loadSubscriptionData();
             alert('Upgraded to yearly plan successfully.');

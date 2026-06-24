@@ -96,7 +96,7 @@ npm run dev -- -p 3001
 
 | Bileşen | Stack |
 |---------|-------|
-| `backend/` | Java 21, Spring Boot, PostgreSQL, JWT, Stripe |
+| `backend/` | Java 21, Spring Boot, PostgreSQL, JWT, Lemon Squeezy |
 | `extension/` | Chrome MV3, vanilla JS |
 | `web/auth/` | Next.js 15, Prisma, Google OAuth |
 | `web/checkout/` | Next.js 15, Paddle.js |
@@ -104,7 +104,7 @@ npm run dev -- -p 3001
 ## Dokümantasyon
 
 - `docs/GOOGLE_OAUTH.md` — Google OAuth production kurulumu
-- `docs/STRIPE_SETUP.md` — Stripe abonelik kurulumu
+- `docs/LEMONSQUEEZY_SETUP.md` — Lemon Squeezy abonelik kurulumu
 
 ## Kaynak Projeler
 
