@@ -25,7 +25,7 @@ public class User {
     private String pictureUrl;
 
     @Column(unique = true)
-    private String lemonsqueezyCustomerId;
+    private String paddleCustomerId;
 
     @Enumerated(EnumType.STRING)
     private AuthProvider provider;

@@ -5,8 +5,8 @@ const API_CONFIG = {
     BASE_URL: USE_LOCAL_API
         ? 'http://localhost:8081/api'
         : 'https://api.etsyfetcher.shop/api',
-    LEMONSQUEEZY_VARIANT_ID_MONTHLY: '',
-    LEMONSQUEEZY_VARIANT_ID_YEARLY: '',
+    PADDLE_PRICE_ID_MONTHLY: '',
+    PADDLE_PRICE_ID_YEARLY: '',
 };
 
 if (typeof globalThis !== 'undefined') {

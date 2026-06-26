@@ -21,7 +21,7 @@ public class Subscription {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    private String lemonsqueezySubscriptionId;
+    private String paddleSubscriptionId;
     private String planId;
 
     @Enumerated(EnumType.STRING)

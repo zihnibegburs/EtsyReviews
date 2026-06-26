@@ -99,12 +99,12 @@ const API = {
         }
     },
 
-    async createCheckoutSession(variantId) {
+    async createCheckoutSession(priceId) {
         try {
-            const response = await fetch(`${this.BASE_URL}/lemonsqueezy/checkout`, {
+            const response = await fetch(`${this.BASE_URL}/paddle/checkout`, {
                 method: 'POST',
                 headers: await this.getHeaders(true),
-                body: JSON.stringify({ variantId })
+                body: JSON.stringify({ priceId })
             });
 
             if (!response.ok) {
@@ -172,12 +172,12 @@ const API = {
         }
     },
 
-    async upgradeSubscription(variantId) {
+    async upgradeSubscription(priceId) {
         try {
             const response = await fetch(`${this.BASE_URL}/subscription/upgrade`, {
                 method: 'POST',
                 headers: await this.getHeaders(true),
-                body: JSON.stringify({ variantId })
+                body: JSON.stringify({ priceId })
             });
 
             if (!response.ok) {

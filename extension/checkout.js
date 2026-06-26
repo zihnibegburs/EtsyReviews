@@ -32,10 +32,10 @@ function clearCheckoutError() {
 }
 
 function getLocalBillingConfig() {
-    if (API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY && API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY) {
+    if (API_CONFIG.PADDLE_PRICE_ID_MONTHLY && API_CONFIG.PADDLE_PRICE_ID_YEARLY) {
         return {
-            variantIdMonthly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY,
-            variantIdYearly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY
+            priceIdMonthly: API_CONFIG.PADDLE_PRICE_ID_MONTHLY,
+            priceIdYearly: API_CONFIG.PADDLE_PRICE_ID_YEARLY
         };
     }
     return null;
@@ -63,13 +63,13 @@ async function fetchBillingConfigFromApi() {
     const token = await StorageManager.getToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-    const response = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/lemonsqueezy/config`, { headers });
+    const response = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/paddle/config`, { headers });
     if (!response.ok) {
         return null;
     }
 
     const data = await response.json();
-    if (!data?.variantIdMonthly || !data?.variantIdYearly) {
+    if (!data?.priceIdMonthly || !data?.priceIdYearly) {
         return null;
     }
 
@@ -135,8 +135,8 @@ async function loadStatus() {
                 statusEl.style.color = '#27ae60';
 
                 const config = await loadBillingConfig();
-                const isMonthly = subscription.planId === config.variantIdMonthly;
-                const isYearly = subscription.planId === config.variantIdYearly;
+                const isMonthly = subscription.planId === config.priceIdMonthly;
+                const isYearly = subscription.planId === config.priceIdYearly;
 
                 if (isYearly || isPendingCancel) {
                     setCheckoutButtonsDisabled(true, 'You already have PRO');
@@ -184,7 +184,7 @@ function setCheckoutButtonsDisabled(disabled, label = null) {
     }
 }
 
-async function openCheckout(variantId) {
+async function openCheckout(priceId) {
     const loadingDiv = document.getElementById('loadingMessage');
     loadingDiv.classList.remove('hidden');
     clearCheckoutError();
@@ -195,13 +195,13 @@ async function openCheckout(variantId) {
             throw new Error('Please login in the extension first, then try again.');
         }
 
-        const response = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/lemonsqueezy/checkout`, {
+        const response = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/paddle/checkout`, {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ variantId })
+            body: JSON.stringify({ priceId })
         });
 
         let data;
@@ -226,7 +226,7 @@ async function openCheckout(variantId) {
     }
 }
 
-async function upgradeSubscription(variantId) {
+async function upgradeSubscription(priceId) {
     const token = await StorageManager.getToken();
     if (!token) {
         throw new Error('Please login in the extension first, then try again.');
@@ -238,7 +238,7 @@ async function upgradeSubscription(variantId) {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ variantId })
+        body: JSON.stringify({ priceId })
     });
 
     const data = await response.json();
@@ -268,22 +268,22 @@ async function startCheckout(plan) {
 
     try {
         const config = await loadBillingConfig();
-        const variantId = plan === 'yearly' ? config.variantIdYearly : config.variantIdMonthly;
+        const priceId = plan === 'yearly' ? config.priceIdYearly : config.priceIdMonthly;
 
         if (plan === 'yearly' && activeBtn.dataset.action === 'upgrade') {
             const confirmed = confirm(
-                'Upgrade to the yearly plan?\n\nLemon Squeezy will apply prorated credit from your current monthly plan.'
+                'Upgrade to the yearly plan?\n\nPaddle will apply prorated credit from your current monthly plan.'
             );
             if (!confirmed) {
                 return;
             }
-            await upgradeSubscription(variantId);
+            await upgradeSubscription(priceId);
             await loadStatus();
             alert('Upgraded to yearly plan successfully.');
             return;
         }
 
-        await openCheckout(variantId);
+        await openCheckout(priceId);
     } catch (error) {
         console.error('Checkout error:', error);
         showCheckoutError(error.message || 'Failed to open checkout');

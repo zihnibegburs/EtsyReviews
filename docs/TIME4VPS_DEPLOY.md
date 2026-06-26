@@ -69,13 +69,13 @@ API_DOMAIN=api.etsyfetcher.shop
 POSTGRES_PASSWORD=güçlü-rastgele-şifre
 JWT_SECRET=en-az-32-karakterlik-gizli-anahtar
 GOOGLE_CLIENT_ID=extension-manifest-ile-aynı-client-id
-LEMONSQUEEZY_API_KEY=...
-LEMONSQUEEZY_STORE_ID=...
-LEMONSQUEEZY_WEBHOOK_SECRET=...
-LEMONSQUEEZY_VARIANT_ID_MONTHLY=...
-LEMONSQUEEZY_VARIANT_ID_YEARLY=...
-LEMONSQUEEZY_SUCCESS_URL=https://api.etsyfetcher.shop/checkout/success?success=1
-LEMONSQUEEZY_CANCEL_URL=https://api.etsyfetcher.shop/checkout/cancel
+PADDLE_API_KEY=...
+PADDLE_ENVIRONMENT=sandbox
+PADDLE_WEBHOOK_SECRET=...
+PADDLE_PRICE_ID_MONTHLY=...
+PADDLE_PRICE_ID_YEARLY=...
+PADDLE_SUCCESS_URL=https://api.etsyfetcher.shop/checkout/success?success=1
+PADDLE_CANCEL_URL=https://api.etsyfetcher.shop/checkout/cancel
 ```
 
 `GOOGLE_CLIENT_ID` → `extension/manifest.json` içindeki `oauth2.client_id` ile **birebir aynı** olmalı.
@@ -100,17 +100,17 @@ curl -s https://api.etsyfetcher.shop/health
 
 ---
 
-## 6. Lemon Squeezy webhook
+## 6. Paddle webhook
 
-Dashboard → **Settings → Webhooks** → URL güncelle:
+Dashboard → **Developer tools → Notifications** → URL güncelle:
 
 ```
-https://api.etsyfetcher.shop/api/lemonsqueezy/webhook
+https://api.etsyfetcher.shop/api/paddle/webhook
 ```
 
-Events: `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_expired`
+Events: `subscription.*`, `transaction.completed`
 
-Signing secret → `.env` içindeki `LEMONSQUEEZY_WEBHOOK_SECRET` ile aynı.
+Webhook secret → `.env` içindeki `PADDLE_WEBHOOK_SECRET` ile aynı.
 
 ---
 

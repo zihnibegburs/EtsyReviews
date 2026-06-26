@@ -4,7 +4,7 @@ import com.example.etsybackend.dto.SubscriptionDTO;
 import com.example.etsybackend.model.Subscription;
 import com.example.etsybackend.repository.SubscriptionRepository;
 import com.example.etsybackend.repository.UserRepository;
-import com.example.etsybackend.service.LemonSqueezyService;
+import com.example.etsybackend.service.PaddleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,16 +21,16 @@ import java.util.Map;
 public class SubscriptionController {
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
-    private final LemonSqueezyService lemonSqueezyService;
+    private final PaddleService paddleService;
 
     public SubscriptionController(
             SubscriptionRepository subscriptionRepository,
             UserRepository userRepository,
-            LemonSqueezyService lemonSqueezyService
+            PaddleService paddleService
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
-        this.lemonSqueezyService = lemonSqueezyService;
+        this.paddleService = paddleService;
     }
 
     @GetMapping("/me")
@@ -59,7 +59,7 @@ public class SubscriptionController {
                 .getId();
 
         try {
-            Subscription subscription = lemonSqueezyService.cancelSubscription(userId);
+            Subscription subscription = paddleService.cancelSubscription(userId);
             return ResponseEntity.ok(toDto(subscription));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -75,7 +75,7 @@ public class SubscriptionController {
                 .getId();
 
         try {
-            Subscription subscription = lemonSqueezyService.reactivateSubscription(userId);
+            Subscription subscription = paddleService.reactivateSubscription(userId);
             return ResponseEntity.ok(toDto(subscription));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -93,13 +93,13 @@ public class SubscriptionController {
                 .orElseThrow(() -> new RuntimeException("User not found"))
                 .getId();
 
-        String variantId = request.get("variantId");
-        if (variantId == null || variantId.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "variantId is required"));
+        String priceId = request.get("priceId");
+        if (priceId == null || priceId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "priceId is required"));
         }
 
         try {
-            Subscription subscription = lemonSqueezyService.upgradeSubscription(userId, variantId);
+            Subscription subscription = paddleService.upgradeSubscription(userId, priceId);
             return ResponseEntity.ok(toDto(subscription));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

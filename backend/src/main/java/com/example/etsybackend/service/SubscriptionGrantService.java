@@ -23,8 +23,8 @@ public class SubscriptionGrantService {
     @Value("${app.admin-api-key:}")
     private String adminApiKey;
 
-    @Value("${lemonsqueezy.variant-id-monthly}")
-    private String monthlyVariantId;
+    @Value("${paddle.price-id-monthly}")
+    private String monthlyPriceId;
 
     public SubscriptionGrantService(
             UserRepository userRepository,
@@ -64,7 +64,7 @@ public class SubscriptionGrantService {
             subscription = new Subscription();
             subscription.setUser(user);
             subscription.setStatus(SubscriptionStatus.ACTIVE);
-            subscription.setPlanId(monthlyVariantId);
+            subscription.setPlanId(monthlyPriceId);
             subscription.setCurrentPeriodStart(now);
             subscription.setCurrentPeriodEnd(now.plusMonths(1));
             subscription.setCancelAtPeriodEnd(false);

@@ -3,7 +3,7 @@ package com.example.etsybackend.controller;
 import com.example.etsybackend.exception.ActiveSubscriptionException;
 import com.example.etsybackend.model.User;
 import com.example.etsybackend.repository.UserRepository;
-import com.example.etsybackend.service.LemonSqueezyService;
+import com.example.etsybackend.service.PaddleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,59 +16,60 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/lemonsqueezy")
-@Tag(name = "Lemon Squeezy", description = "Lemon Squeezy subscription endpoints")
-public class LemonSqueezyController {
-    private final LemonSqueezyService lemonSqueezyService;
+@RequestMapping("/api/paddle")
+@Tag(name = "Paddle", description = "Paddle subscription endpoints")
+public class PaddleController {
+    private final PaddleService paddleService;
     private final UserRepository userRepository;
 
-    @Value("${lemonsqueezy.variant-id-monthly}")
-    private String variantIdMonthly;
+    @Value("${paddle.price-id-monthly}")
+    private String priceIdMonthly;
 
-    @Value("${lemonsqueezy.variant-id-yearly}")
-    private String variantIdYearly;
+    @Value("${paddle.price-id-yearly}")
+    private String priceIdYearly;
 
-    public LemonSqueezyController(LemonSqueezyService lemonSqueezyService, UserRepository userRepository) {
-        this.lemonSqueezyService = lemonSqueezyService;
+    public PaddleController(PaddleService paddleService, UserRepository userRepository) {
+        this.paddleService = paddleService;
         this.userRepository = userRepository;
     }
 
     @GetMapping("/config")
-    @Operation(summary = "Get Lemon Squeezy public config for extension checkout")
+    @Operation(summary = "Get Paddle public config for extension checkout")
     public ResponseEntity<Map<String, String>> getConfig() {
         Map<String, String> config = new HashMap<>();
-        config.put("variantIdMonthly", variantIdMonthly);
-        config.put("variantIdYearly", variantIdYearly);
+        config.put("priceIdMonthly", priceIdMonthly);
+        config.put("priceIdYearly", priceIdYearly);
         return ResponseEntity.ok(config);
     }
 
     @PostMapping("/checkout")
     @SecurityRequirement(name = "bearerAuth")
-    @Operation(summary = "Create Lemon Squeezy checkout", description = "Returns hosted checkout URL for subscription")
+    @Operation(summary = "Create Paddle checkout", description = "Returns hosted checkout URL for subscription")
     public ResponseEntity<Map<String, String>> createCheckout(
             Authentication authentication,
             @RequestBody Map<String, String> request
     ) {
         String email = authentication.getName();
-        String variantId = request.get("variantId");
+        String priceId = request.get("priceId");
 
-        if (variantId == null || variantId.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "variantId is required"));
+        if (priceId == null || priceId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "priceId is required"));
         }
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         try {
-            String checkoutUrl = lemonSqueezyService.createCheckoutUrl(
+            String checkoutUrl = paddleService.createCheckoutUrl(
                     user.getId(),
                     user.getEmail(),
-                    variantId
+                    user.getName(),
+                    priceId
             );
 
             Map<String, String> response = new HashMap<>();
             response.put("checkoutUrl", checkoutUrl);
-            response.put("variantId", variantId);
+            response.put("priceId", priceId);
             return ResponseEntity.ok(response);
         } catch (ActiveSubscriptionException e) {
             return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));

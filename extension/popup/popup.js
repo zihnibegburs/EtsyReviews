@@ -547,12 +547,12 @@ tabSettings.addEventListener('click', () => showTab('settings'));
 // =============== PURCHASE PAGE ===============
 async function getBillingConfig() {
     try {
-        const response = await fetch(`${API.BASE_URL}/lemonsqueezy/config`, {
+        const response = await fetch(`${API.BASE_URL}/paddle/config`, {
             headers: await API.getHeaders(true)
         });
         if (response.ok) {
             const data = await response.json();
-            if (data?.variantIdMonthly && data?.variantIdYearly) {
+            if (data?.priceIdMonthly && data?.priceIdYearly) {
                 return data;
             }
         }
@@ -560,10 +560,10 @@ async function getBillingConfig() {
         console.warn('Could not load billing config from API:', error.message);
     }
 
-    if (API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY && API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY) {
+    if (API_CONFIG.PADDLE_PRICE_ID_MONTHLY && API_CONFIG.PADDLE_PRICE_ID_YEARLY) {
         return {
-            variantIdMonthly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_MONTHLY,
-            variantIdYearly: API_CONFIG.LEMONSQUEEZY_VARIANT_ID_YEARLY
+            priceIdMonthly: API_CONFIG.PADDLE_PRICE_ID_MONTHLY,
+            priceIdYearly: API_CONFIG.PADDLE_PRICE_ID_YEARLY
         };
     }
 
@@ -581,10 +581,10 @@ async function loadPurchasePageData() {
         const hasActive = API.hasProAccess(subscription);
         const isPendingCancel = API.isPendingCancel(subscription);
         const periodEnd = formatSubscriptionDate(subscription?.currentPeriodEnd);
-        const monthlyVariantId = priceConfig?.variantIdMonthly;
-        const yearlyVariantId = priceConfig?.variantIdYearly;
-        const isMonthly = hasActive && monthlyVariantId && subscription.planId === monthlyVariantId;
-        const isYearly = hasActive && yearlyVariantId && subscription.planId === yearlyVariantId;
+        const monthlyPriceId = priceConfig?.priceIdMonthly;
+        const yearlyPriceId = priceConfig?.priceIdYearly;
+        const isMonthly = hasActive && monthlyPriceId && subscription.planId === monthlyPriceId;
+        const isYearly = hasActive && yearlyPriceId && subscription.planId === yearlyPriceId;
 
         if (hasActive) {
             currentPlan.textContent = 'PRO';
@@ -678,7 +678,7 @@ buyYearly.addEventListener('click', async () => {
 
     if (buyYearly.dataset.action === 'upgrade') {
         const confirmed = confirm(
-            'Upgrade to the yearly plan?\n\nLemon Squeezy will apply prorated credit from your current monthly plan.'
+            'Upgrade to the yearly plan?\n\nPaddle will apply prorated credit from your current monthly plan.'
         );
         if (!confirmed) {
             return;
@@ -690,11 +690,11 @@ buyYearly.addEventListener('click', async () => {
 
         try {
             const priceConfig = await getBillingConfig();
-            if (!priceConfig?.variantIdYearly) {
-                throw new Error('Could not load yearly plan variant');
+            if (!priceConfig?.priceIdYearly) {
+                throw new Error('Could not load yearly plan price');
             }
 
-            await API.upgradeSubscription(priceConfig.variantIdYearly);
+            await API.upgradeSubscription(priceConfig.priceIdYearly);
             await loadPurchasePageData();
             loadSubscriptionData();
             alert('Upgraded to yearly plan successfully.');

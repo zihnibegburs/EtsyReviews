@@ -18,14 +18,14 @@ google.oauth2.client-id=your-chrome-extension-client-id
 jwt.secret=change-me-to-a-long-random-secret-at-least-32-chars
 jwt.expiration=86400000
 
-# Stripe
-stripe.secret-key=sk_test_your_secret_key
-stripe.publishable-key=pk_test_your_publishable_key
-stripe.webhook-secret=whsec_your_webhook_secret
-stripe.price-id-monthly=price_your_monthly_id
-stripe.price-id-yearly=price_your_yearly_id
-stripe.success-url=http://localhost:8081/checkout/success?session_id={CHECKOUT_SESSION_ID}
-stripe.cancel-url=http://localhost:8081/checkout/cancel
+# Paddle — Paddle dashboard'dan gerçek değerleri yaz
+paddle.api-key=your_paddle_api_key
+paddle.environment=sandbox
+paddle.webhook-secret=your_webhook_secret
+paddle.price-id-monthly=pri_your_monthly_price_id
+paddle.price-id-yearly=pri_your_yearly_price_id
+paddle.success-url=http://localhost:8081/checkout/success?success=1
+paddle.cancel-url=http://localhost:8081/checkout/cancel
 
 # CORS — SecurityConfig içinde chrome-extension://* tanımlı
 

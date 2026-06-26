@@ -8,11 +8,11 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "lemonsqueezy_events")
+@Table(name = "paddle_events")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class LemonSqueezyEvent {
+public class PaddleEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

@@ -20,7 +20,7 @@
     "http://localhost:8081/*",
     "https://api.etsyfetcher.shop/*",
     "https://www.googleapis.com/*",
-    "https://*.lemonsqueezy.com/*",
+    "https://*.paddle.com/*",
     "*://www.etsy.com/*"
   ],
   "action": {
