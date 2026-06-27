@@ -66,6 +66,12 @@ public class PaddleService {
     @Value("${paddle.environment:sandbox}")
     private String environment;
 
+    @Value("${paddle.hosted-checkout-url:}")
+    private String hostedCheckoutUrl;
+
+    @Value("${paddle.hosted-checkout-id:}")
+    private String hostedCheckoutId;
+
     private final PaddleApiClient apiClient;
     private final ObjectMapper objectMapper;
     private final SubscriptionRepository subscriptionRepository;
@@ -93,25 +99,33 @@ public class PaddleService {
                     "Paddle config is incomplete. Checkout will fail until api-key and price IDs are set."
             );
         }
+        if (isBlankConfig(hostedCheckoutUrl) && isBlankConfig(hostedCheckoutId)) {
+            log.warn(
+                    "Paddle hosted checkout is not configured. Set paddle.hosted-checkout-url or "
+                            + "paddle.hosted-checkout-id (Paddle Dashboard > Checkout > Hosted checkouts)."
+            );
+        }
+        if (!isBlankConfig(webhookSecret) && webhookSecret.startsWith("ntfset_")
+                && !webhookSecret.startsWith("pdl_ntfset_")) {
+            log.warn(
+                    "paddle.webhook-secret looks like a notification destination ID (ntfset_...), "
+                            + "not the endpoint secret key. In Paddle Dashboard > Notifications > Edit destination, "
+                            + "copy the secret key field (starts with pdl_ntfset_...)."
+            );
+        }
     }
 
     public String createCheckoutUrl(Long userId, String email, String name, String priceId) {
         ensurePaddleConfigured();
+        ensureHostedCheckoutConfigured();
         ensureNoActiveSubscription(userId);
+
+        String normalizedEmail = normalizeEmail(email);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        String customerId = user.getPaddleCustomerId();
-        if (customerId == null || customerId.isBlank()) {
-            JsonNode customer = apiClient.createCustomer(email, name);
-            customerId = customer.path("id").asText(null);
-            if (customerId == null || customerId.isBlank()) {
-                throw new RuntimeException("Failed to create Paddle customer");
-            }
-            user.setPaddleCustomerId(customerId);
-            userRepository.save(user);
-        }
+        String customerId = resolvePaddleCustomerId(user, normalizedEmail, name);
 
         JsonNode transaction = apiClient.createTransaction(
                 customerId,
@@ -121,11 +135,49 @@ public class PaddleService {
                 cancelUrl
         );
 
-        String checkoutUrl = extractCheckoutUrl(transaction);
-        if (checkoutUrl == null || checkoutUrl.isBlank()) {
-            checkoutUrl = buildFallbackCheckoutUrl(priceId, email);
+        String transactionId = transaction.path("id").asText(null);
+        if (transactionId == null || transactionId.isBlank()) {
+            throw new RuntimeException("Failed to create Paddle transaction");
         }
+
+        String checkoutUrl = buildHostedCheckoutUrl(transactionId, priceId, normalizedEmail, customerId);
+        log.info("Paddle hosted checkout URL: {}", checkoutUrl);
         return checkoutUrl;
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null) {
+            throw new RuntimeException("A valid email is required for checkout");
+        }
+        String normalized = email.trim();
+        if (normalized.isBlank() || !normalized.contains("@")) {
+            throw new RuntimeException("A valid email is required for checkout");
+        }
+        return normalized;
+    }
+
+    private String resolvePaddleCustomerId(User user, String email, String name) {
+        String customerId = user.getPaddleCustomerId();
+        if (customerId != null && !customerId.isBlank()) {
+            return customerId;
+        }
+
+        Optional<String> existingCustomerId = apiClient.findCustomerIdByEmail(email);
+        if (existingCustomerId.isPresent()) {
+            customerId = existingCustomerId.get();
+            user.setPaddleCustomerId(customerId);
+            userRepository.save(user);
+            return customerId;
+        }
+
+        JsonNode customer = apiClient.createCustomer(email, name);
+        customerId = customer.path("id").asText(null);
+        if (customerId == null || customerId.isBlank()) {
+            throw new RuntimeException("Failed to create Paddle customer");
+        }
+        user.setPaddleCustomerId(customerId);
+        userRepository.save(user);
+        return customerId;
     }
 
     public Subscription cancelSubscription(Long userId) {
@@ -168,7 +220,7 @@ public class PaddleService {
             throw new RuntimeException("Subscription cannot be reactivated");
         }
 
-        JsonNode response = apiClient.resumeSubscription(subscription.getPaddleSubscriptionId());
+        JsonNode response = apiClient.removeScheduledChange(subscription.getPaddleSubscriptionId());
         applyPaddleSubscription(subscription, response);
         subscription.setCancelledAt(null);
         subscription.setCancelAtPeriodEnd(false);
@@ -486,19 +538,54 @@ public class PaddleService {
         );
     }
 
-    private String extractCheckoutUrl(JsonNode transaction) {
-        String url = transaction.path("checkout").path("url").asText(null);
-        if (url != null && !url.isBlank()) {
-            return url;
+    private String buildHostedCheckoutUrl(
+            String transactionId,
+            String priceId,
+            String email,
+            String customerId
+    ) {
+        String base = resolveHostedCheckoutBase();
+        String separator = base.contains("?") ? "&" : "?";
+        StringBuilder url = new StringBuilder(base)
+                .append(separator)
+                .append("transaction_id=")
+                .append(java.net.URLEncoder.encode(transactionId, StandardCharsets.UTF_8))
+                .append("&price_id=")
+                .append(java.net.URLEncoder.encode(priceId, StandardCharsets.UTF_8))
+                .append("&user_email=")
+                .append(java.net.URLEncoder.encode(email, StandardCharsets.UTF_8));
+        if (customerId != null && !customerId.isBlank()) {
+            url.append("&paddle_customer_id=")
+                    .append(java.net.URLEncoder.encode(customerId, StandardCharsets.UTF_8));
         }
-        return transaction.path("checkout_url").asText(null);
+        return url.toString();
     }
 
-    private String buildFallbackCheckoutUrl(String priceId, String email) {
+    private String resolveHostedCheckoutBase() {
+        if (!isBlankConfig(hostedCheckoutUrl)) {
+            return hostedCheckoutUrl.trim();
+        }
         String host = "production".equalsIgnoreCase(environment)
-                ? "https://buy.paddle.com"
-                : "https://sandbox-buy.paddle.com";
-        return host + "/product/" + priceId + "?customer_email=" + java.net.URLEncoder.encode(email, StandardCharsets.UTF_8);
+                ? "https://pay.paddle.io"
+                : "https://sandbox-pay.paddle.io";
+        return host + "/" + hostedCheckoutId.trim();
+    }
+
+    private void ensureHostedCheckoutConfigured() {
+        if (isBlankConfig(hostedCheckoutUrl) && isBlankConfig(hostedCheckoutId)) {
+            throw new RuntimeException(
+                    "Paddle hosted checkout is not configured. "
+                            + "Create one in Paddle Dashboard > Checkout > Hosted checkouts, "
+                            + "then set paddle.hosted-checkout-url (full URL) or paddle.hosted-checkout-id (hsc_...)."
+            );
+        }
+    }
+
+    private boolean isBlankConfig(String value) {
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+        return isMissingConfig(value);
     }
 
     private void ensurePaddleConfigured() {

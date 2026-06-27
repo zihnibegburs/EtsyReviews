@@ -9,6 +9,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.Optional;
+
 @Component
 public class PaddleApiClient {
     private final RestClient restClient;
@@ -39,6 +41,28 @@ public class PaddleApiClient {
             body.put("name", name);
         }
         return post("/customers", body).path("data");
+    }
+
+    public Optional<String> findCustomerIdByEmail(String email) {
+        JsonNode response = restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/customers")
+                        .queryParam("email", email)
+                        .build())
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (request, httpResponse) -> {
+                    throw new RuntimeException(mapClientError(httpResponse.getStatusCode().value(), httpResponse));
+                })
+                .body(JsonNode.class);
+        JsonNode customers = response.path("data");
+        if (!customers.isArray() || customers.isEmpty()) {
+            return Optional.empty();
+        }
+        String customerId = customers.get(0).path("id").asText(null);
+        if (customerId == null || customerId.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(customerId);
     }
 
     public JsonNode createTransaction(
@@ -79,6 +103,12 @@ public class PaddleApiClient {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("effective_from", "immediately");
         return post("/subscriptions/" + subscriptionId + "/resume", body).path("data");
+    }
+
+    public JsonNode removeScheduledChange(String subscriptionId) {
+        ObjectNode body = objectMapper.createObjectNode();
+        body.putNull("scheduled_change");
+        return patch("/subscriptions/" + subscriptionId, body).path("data");
     }
 
     public JsonNode updateSubscriptionItems(String subscriptionId, String priceId) {

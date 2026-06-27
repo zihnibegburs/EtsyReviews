@@ -21,11 +21,14 @@ jwt.expiration=86400000
 # Paddle — Paddle dashboard'dan gerçek değerleri yaz
 paddle.api-key=your_paddle_api_key
 paddle.environment=sandbox
-paddle.webhook-secret=your_webhook_secret
+paddle.webhook-secret=pdl_ntfset_01xxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxx
 paddle.price-id-monthly=pri_your_monthly_price_id
 paddle.price-id-yearly=pri_your_yearly_price_id
 paddle.success-url=http://localhost:8081/checkout/success?success=1
 paddle.cancel-url=http://localhost:8081/checkout/cancel
+# Full URL or just the hsc_... ID from Paddle Dashboard > Checkout > Hosted checkouts
+paddle.hosted-checkout-url=
+paddle.hosted-checkout-id=
 
 # CORS — SecurityConfig içinde chrome-extension://* tanımlı
 

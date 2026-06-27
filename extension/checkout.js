@@ -210,6 +210,9 @@ async function openCheckout(priceId) {
         } catch {
             throw new Error(`Checkout failed (HTTP ${response.status})`);
         }
+        if (response.status === 401 || response.status === 403) {
+            throw new Error('Session expired. Log out and sign in again from the extension popup.');
+        }
         if (response.status === 409) {
             throw new Error(data.error || 'You already have an active subscription.');
         }
