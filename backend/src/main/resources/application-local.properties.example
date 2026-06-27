@@ -26,9 +26,8 @@ paddle.price-id-monthly=pri_your_monthly_price_id
 paddle.price-id-yearly=pri_your_yearly_price_id
 paddle.success-url=http://localhost:8081/checkout/success?success=1
 paddle.cancel-url=http://localhost:8081/checkout/cancel
-# Full URL or just the hsc_... ID from Paddle Dashboard > Checkout > Hosted checkouts
+# Full URL from Paddle Dashboard > Checkout > Hosted checkouts
 paddle.hosted-checkout-url=
-paddle.hosted-checkout-id=
 
 # CORS — SecurityConfig içinde chrome-extension://* tanımlı
 

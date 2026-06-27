@@ -69,9 +69,6 @@ public class PaddleService {
     @Value("${paddle.hosted-checkout-url:}")
     private String hostedCheckoutUrl;
 
-    @Value("${paddle.hosted-checkout-id:}")
-    private String hostedCheckoutId;
-
     private final PaddleApiClient apiClient;
     private final ObjectMapper objectMapper;
     private final SubscriptionRepository subscriptionRepository;
@@ -99,10 +96,10 @@ public class PaddleService {
                     "Paddle config is incomplete. Checkout will fail until api-key and price IDs are set."
             );
         }
-        if (isBlankConfig(hostedCheckoutUrl) && isBlankConfig(hostedCheckoutId)) {
+        if (isBlankConfig(hostedCheckoutUrl)) {
             log.warn(
-                    "Paddle hosted checkout is not configured. Set paddle.hosted-checkout-url or "
-                            + "paddle.hosted-checkout-id (Paddle Dashboard > Checkout > Hosted checkouts)."
+                    "Paddle hosted checkout is not configured. Set paddle.hosted-checkout-url "
+                            + "(Paddle Dashboard > Checkout > Hosted checkouts)."
             );
         }
         if (!isBlankConfig(webhookSecret) && webhookSecret.startsWith("ntfset_")
@@ -562,21 +559,15 @@ public class PaddleService {
     }
 
     private String resolveHostedCheckoutBase() {
-        if (!isBlankConfig(hostedCheckoutUrl)) {
-            return hostedCheckoutUrl.trim();
-        }
-        String host = "production".equalsIgnoreCase(environment)
-                ? "https://pay.paddle.io"
-                : "https://sandbox-pay.paddle.io";
-        return host + "/" + hostedCheckoutId.trim();
+        return hostedCheckoutUrl.trim();
     }
 
     private void ensureHostedCheckoutConfigured() {
-        if (isBlankConfig(hostedCheckoutUrl) && isBlankConfig(hostedCheckoutId)) {
+        if (isBlankConfig(hostedCheckoutUrl)) {
             throw new RuntimeException(
                     "Paddle hosted checkout is not configured. "
                             + "Create one in Paddle Dashboard > Checkout > Hosted checkouts, "
-                            + "then set paddle.hosted-checkout-url (full URL) or paddle.hosted-checkout-id (hsc_...)."
+                            + "then set paddle.hosted-checkout-url to the full URL."
             );
         }
     }
