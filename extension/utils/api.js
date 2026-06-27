@@ -77,6 +77,11 @@ const API = {
         }
     },
 
+    isAuthError(error) {
+        return error?.code === 'AUTH_REQUIRED'
+            || (error?.message && (error.message.includes('401') || error.message.includes('403')));
+    },
+
     // Subscription endpoints
     async getSubscription() {
         try {
@@ -85,16 +90,25 @@ const API = {
                 headers: await this.getHeaders(true)
             });
 
+            if (response.status === 404) {
+                return null;
+            }
+
+            if (response.status === 401 || response.status === 403) {
+                const error = new Error('Session expired');
+                error.code = 'AUTH_REQUIRED';
+                throw error;
+            }
+
             if (!response.ok) {
-                if (response.status === 404) {
-                    return null;
-                }
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             return await response.json();
         } catch (error) {
-            console.error('Get subscription error:', error);
+            if (!this.isAuthError(error)) {
+                console.error('Get subscription error:', error);
+            }
             throw error;
         }
     },

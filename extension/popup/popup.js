@@ -517,7 +517,16 @@ async function loadSubscriptionData() {
             homeFreeLimitNotice?.classList.remove('hidden');
         }
     } catch (error) {
-        console.error('❌ Failed to load subscription:', error);
+        if (API.isAuthError(error)) {
+            console.warn('⚠️ Subscription check skipped (session expired or invalid token)');
+            const token = await StorageManager.getToken();
+            const cachedUser = await StorageManager.getUser();
+            if (token && cachedUser) {
+                validateTokenInBackground(token, cachedUser);
+            }
+        } else {
+            console.error('❌ Failed to load subscription:', error);
+        }
         statusBadge.textContent = 'FREE';
         statusBadge.className = 'status-badge inactive';
         homeFreeLimitNotice?.classList.remove('hidden');
@@ -642,7 +651,9 @@ async function loadPurchasePageData() {
             currentPlanExpiry.classList.add('hidden');
         }
     } catch (error) {
-        console.error('❌ Failed to load purchase page data:', error);
+        if (!API.isAuthError(error)) {
+            console.error('❌ Failed to load purchase page data:', error);
+        }
         currentPlan.textContent = 'FREE';
         currentPlan.className = 'status-badge inactive';
         buyMonthly.disabled = false;
@@ -780,7 +791,9 @@ async function loadSettingsPageData() {
         const subscription = await API.getSubscription();
         updateSubscriptionSettingsUI(subscription);
     } catch (error) {
-        console.error('❌ Failed to load settings page data:', error);
+        if (!API.isAuthError(error)) {
+            console.error('❌ Failed to load settings page data:', error);
+        }
         updateSubscriptionSettingsUI(null);
     }
 }

@@ -1,5 +1,5 @@
 // Local geliştirme: true | Production / Chrome Web Store: false
-const USE_LOCAL_API = true;
+const USE_LOCAL_API = false;
 
 const API_CONFIG = {
     BASE_URL: USE_LOCAL_API

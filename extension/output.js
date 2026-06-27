@@ -953,6 +953,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (response.ok) {
                 const subscription = await response.json();
                 isProUser = SubscriptionHelper.hasProAccess(subscription);
+            } else if (response.status === 401 || response.status === 403) {
+                console.warn('Subscription check skipped (session expired)');
             }
         }
     } catch (error) {
