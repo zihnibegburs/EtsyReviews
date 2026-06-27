@@ -8,7 +8,7 @@ Backend + PostgreSQL + HTTPS (Caddy) tek sunucuda Docker ile çalışır.
 |---|---|
 | **VPS** | Time4VPS 2 GB RAM (önerilen) veya 1 GB (sıkışık) |
 | **OS** | Ubuntu 22.04 / 24.04 |
-| **Domain** | Örn. `api.etsyfetcher.shop` → VPS IP (A kaydı) |
+| **Domain** | `api.etsyfetcher.shop` → VPS IP (A kaydı); statik sayfalar da bu domain üzerinden |
 | **Repo** | GitHub veya sunucuya dosya kopyası |
 
 ---

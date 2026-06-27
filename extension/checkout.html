@@ -205,6 +205,49 @@
             display: none !important;
         }
 
+        .terms-acceptance {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .terms-acceptance label {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+        }
+
+        .terms-acceptance input[type="checkbox"] {
+            margin-top: 3px;
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            accent-color: var(--color-primary);
+            cursor: pointer;
+        }
+
+        .terms-acceptance a {
+            color: var(--color-primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .terms-acceptance a:hover {
+            text-decoration: underline;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
         .spinner {
             border: 3px solid var(--color-border);
             border-top: 3px solid var(--color-primary);
@@ -278,6 +321,19 @@
 
         <div id="checkoutError" class="checkout-error hidden" role="alert"></div>
 
+        <div id="termsAcceptance" class="terms-acceptance">
+            <label for="acceptTerms">
+                <input type="checkbox" id="acceptTerms" name="acceptTerms">
+                <span>
+                    I agree to the
+                    <a href="#" id="termsLink" target="_blank" rel="noopener noreferrer">Terms of Service</a>,
+                    <a href="#" id="privacyLink" target="_blank" rel="noopener noreferrer">Privacy Policy</a>,
+                    and
+                    <a href="#" id="refundLink" target="_blank" rel="noopener noreferrer">Refund Policy</a>.
+                </span>
+            </label>
+        </div>
+
         <div class="pricing-container">
             <div class="pricing-card">
                 <h3>Monthly</h3>
@@ -289,7 +345,7 @@
                     <li>Priority support</li>
                     <li>Cancel anytime</li>
                 </ul>
-                <button id="monthlyBtn" class="btn btn-primary">Get Monthly Plan</button>
+                <button id="monthlyBtn" class="btn btn-primary" disabled>Get Monthly Plan</button>
             </div>
 
             <div class="pricing-card featured">
@@ -302,7 +358,7 @@
                     <li>Save $24 (2 months free)</li>
                     <li>Best value — 25% off vs monthly</li>
                 </ul>
-                <button id="yearlyBtn" class="btn btn-primary">Get Yearly Plan</button>
+                <button id="yearlyBtn" class="btn btn-primary" disabled>Get Yearly Plan</button>
             </div>
         </div>
 

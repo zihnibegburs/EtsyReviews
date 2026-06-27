@@ -47,13 +47,20 @@ public class PaddleController {
     @Operation(summary = "Create Paddle checkout", description = "Returns hosted checkout URL for subscription")
     public ResponseEntity<Map<String, String>> createCheckout(
             Authentication authentication,
-            @RequestBody Map<String, String> request
+            @RequestBody Map<String, Object> request
     ) {
         String email = authentication.getName();
-        String priceId = request.get("priceId");
+        Object priceIdValue = request.get("priceId");
+        String priceId = priceIdValue == null ? null : String.valueOf(priceIdValue);
 
         if (priceId == null || priceId.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "priceId is required"));
+        }
+
+        if (!isTermsAccepted(request)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "You must accept the Terms of Service before subscribing."
+            ));
         }
 
         User user = userRepository.findByEmail(email)
@@ -77,5 +84,16 @@ public class PaddleController {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Failed to create checkout: " + e.getMessage()));
         }
+    }
+
+    private boolean isTermsAccepted(Map<String, Object> request) {
+        Object value = request.get("acceptedTerms");
+        if (value instanceof Boolean accepted) {
+            return accepted;
+        }
+        if (value instanceof String accepted) {
+            return "true".equalsIgnoreCase(accepted);
+        }
+        return false;
     }
 }

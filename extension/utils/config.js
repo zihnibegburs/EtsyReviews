@@ -5,6 +5,9 @@ const API_CONFIG = {
     BASE_URL: USE_LOCAL_API
         ? 'http://localhost:8081/api'
         : 'https://api.etsyfetcher.shop/api',
+    SITE_URL: USE_LOCAL_API
+        ? 'http://localhost:8081'
+        : 'https://api.etsyfetcher.shop',
     PADDLE_PRICE_ID_MONTHLY: 'pri_01kw1w2z9c9k9439mx4z56gn4j',
     PADDLE_PRICE_ID_YEARLY: 'pri_01kw1w48nggzm5r653vgy09ggd',
 };

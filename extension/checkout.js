@@ -13,6 +13,54 @@ const StorageManager = {
 
 let billingConfig = null;
 
+function getSiteUrl() {
+    return (API_CONFIG.SITE_URL || 'https://api.etsyfetcher.shop').replace(/\/$/, '');
+}
+
+function setupPolicyLinks() {
+    const siteUrl = getSiteUrl();
+    const termsLink = document.getElementById('termsLink');
+    const privacyLink = document.getElementById('privacyLink');
+    const refundLink = document.getElementById('refundLink');
+
+    if (termsLink) termsLink.href = `${siteUrl}/terms`;
+    if (privacyLink) privacyLink.href = `${siteUrl}/privacy`;
+    if (refundLink) refundLink.href = `${siteUrl}/refund`;
+
+    [termsLink, privacyLink, refundLink].forEach((link) => {
+        link?.addEventListener('click', (event) => event.stopPropagation());
+    });
+}
+
+function isTermsAccepted() {
+    const checkbox = document.getElementById('acceptTerms');
+    return Boolean(checkbox?.checked);
+}
+
+function planRequiresTerms(plan) {
+    const yearlyBtn = document.getElementById('yearlyBtn');
+    return !(plan === 'yearly' && yearlyBtn?.dataset.action === 'upgrade');
+}
+
+function refreshCheckoutButtons() {
+    const monthlyBtn = document.getElementById('monthlyBtn');
+    const yearlyBtn = document.getElementById('yearlyBtn');
+    const termsSection = document.getElementById('termsAcceptance');
+    const accepted = isTermsAccepted();
+
+    const monthlyLocked = monthlyBtn.dataset.locked === 'true';
+    const yearlyLocked = yearlyBtn.dataset.locked === 'true';
+    const yearlyUpgrade = yearlyBtn.dataset.action === 'upgrade';
+    const showTerms = !monthlyLocked || (!yearlyLocked && !yearlyUpgrade);
+
+    if (termsSection) {
+        termsSection.classList.toggle('hidden', !showTerms);
+    }
+
+    monthlyBtn.disabled = monthlyLocked || !accepted;
+    yearlyBtn.disabled = yearlyLocked || (!yearlyUpgrade && !accepted);
+}
+
 function showCheckoutError(message) {
     const errorEl = document.getElementById('checkoutError');
     if (!errorEl) {
@@ -142,11 +190,12 @@ async function loadStatus() {
                     setCheckoutButtonsDisabled(true, 'You already have PRO');
                     delete yearlyBtn.dataset.action;
                 } else if (isMonthly) {
-                    monthlyBtn.disabled = true;
+                    monthlyBtn.dataset.locked = 'true';
                     monthlyBtn.textContent = 'Current Plan';
-                    yearlyBtn.disabled = false;
+                    yearlyBtn.dataset.locked = 'false';
                     yearlyBtn.textContent = 'Upgrade to Yearly';
                     yearlyBtn.dataset.action = 'upgrade';
+                    refreshCheckoutButtons();
                 } else {
                     setCheckoutButtonsDisabled(true, 'You already have PRO');
                     delete yearlyBtn.dataset.action;
@@ -158,9 +207,11 @@ async function loadStatus() {
 
         statusEl.textContent = 'FREE';
         statusEl.style.color = '#e67e22';
-        setCheckoutButtonsDisabled(false);
+        monthlyBtn.dataset.locked = 'false';
+        yearlyBtn.dataset.locked = 'false';
         delete monthlyBtn.dataset.action;
         delete yearlyBtn.dataset.action;
+        refreshCheckoutButtons();
         return null;
     } catch (error) {
         console.error('Error loading status:', error);
@@ -172,8 +223,8 @@ function setCheckoutButtonsDisabled(disabled, label = null) {
     const monthlyBtn = document.getElementById('monthlyBtn');
     const yearlyBtn = document.getElementById('yearlyBtn');
 
-    monthlyBtn.disabled = disabled;
-    yearlyBtn.disabled = disabled;
+    monthlyBtn.dataset.locked = disabled ? 'true' : 'false';
+    yearlyBtn.dataset.locked = disabled ? 'true' : 'false';
 
     if (disabled && label) {
         monthlyBtn.textContent = label;
@@ -182,6 +233,8 @@ function setCheckoutButtonsDisabled(disabled, label = null) {
         monthlyBtn.textContent = 'Get Monthly Plan';
         yearlyBtn.textContent = 'Get Yearly Plan';
     }
+
+    refreshCheckoutButtons();
 }
 
 async function openCheckout(priceId) {
@@ -201,7 +254,7 @@ async function openCheckout(priceId) {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ priceId })
+            body: JSON.stringify({ priceId, acceptedTerms: true })
         });
 
         let data;
@@ -261,6 +314,12 @@ async function startCheckout(plan) {
         return;
     }
 
+    if (planRequiresTerms(plan) && !isTermsAccepted()) {
+        showCheckoutError('Please accept the Terms of Service, Privacy Policy, and Refund Policy to continue.');
+        document.getElementById('acceptTerms')?.focus();
+        return;
+    }
+
     const originalLabel = activeBtn.textContent;
     clearCheckoutError();
     monthlyBtn.disabled = true;
@@ -305,9 +364,14 @@ function setupCheckoutButtons() {
     document.getElementById('yearlyBtn').addEventListener('click', () => {
         startCheckout('yearly');
     });
+    document.getElementById('acceptTerms')?.addEventListener('change', () => {
+        clearCheckoutError();
+        refreshCheckoutButtons();
+    });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    setupPolicyLinks();
     setupCheckoutButtons();
     await loadStatus();
 

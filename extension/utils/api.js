@@ -118,7 +118,7 @@ const API = {
             const response = await fetch(`${this.BASE_URL}/paddle/checkout`, {
                 method: 'POST',
                 headers: await this.getHeaders(true),
-                body: JSON.stringify({ priceId })
+                body: JSON.stringify({ priceId, acceptedTerms: true })
             });
 
             if (!response.ok) {

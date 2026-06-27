@@ -1,4 +1,5 @@
 # Domain — .env içindeki API_DOMAIN ile aynı olmalı
+# Statik sayfalar da bu domain üzerinden servis edilir (örn. /pricing, /terms)
 # Örnek: api.etsyfetcher.shop
 {$API_DOMAIN} {
     encode gzip
