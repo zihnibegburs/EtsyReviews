@@ -44,7 +44,7 @@ public class PaddleController {
 
     @PostMapping("/checkout")
     @SecurityRequirement(name = "bearerAuth")
-    @Operation(summary = "Create Paddle checkout", description = "Returns hosted checkout URL for subscription")
+    @Operation(summary = "Create Paddle checkout", description = "Returns checkout payment link (default payment link + _ptxn)")
     public ResponseEntity<Map<String, String>> createCheckout(
             Authentication authentication,
             @RequestBody Map<String, Object> request

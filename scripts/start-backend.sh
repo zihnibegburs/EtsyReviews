@@ -20,8 +20,7 @@ fi
 cd "$ROOT_DIR/backend"
 
 # Boş env değişkenleri application-local.properties'i ezer (Spring Boot önceliği).
-# Cursor/IDE .env yüklediyse PADDLE_HOSTED_CHECKOUT_URL= gibi satırlar checkout'u kırar.
-for var in PADDLE_HOSTED_CHECKOUT_URL; do
+for var in PADDLE_CHECKOUT_URL PADDLE_CLIENT_TOKEN; do
   if [ -z "${!var:-}" ]; then
     unset "$var" 2>/dev/null || true
   fi

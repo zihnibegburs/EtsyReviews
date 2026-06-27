@@ -1,12 +1,13 @@
 # Paddle Kurulum Rehberi
 
-Abonelik ödemeleri **Paddle Billing** ile çalışır.
+Abonelik ödemeleri **Paddle Billing** ile çalışır (Default Payment Link + Paddle.js — Hosted Checkout onayı gerekmez).
 
 ## Akış
 
 ```
-Uzantı → POST /api/paddle/checkout → Paddle hosted checkout
-       → ödeme tamamlanır
+Uzantı → POST /api/paddle/checkout → transaction oluşturulur
+       → checkout.url döner (…/checkout/pay?_ptxn=txn_…)
+       → Paddle.js overlay ile ödeme
        → Paddle webhook → POST /api/paddle/webhook
        → DB'de subscription ACTIVE
        → Uzantı GET /api/subscription/me
@@ -18,26 +19,26 @@ Uzantı → POST /api/paddle/checkout → Paddle hosted checkout
 
 1. https://vendors.paddle.com/
 2. Sandbox ile başla (test için)
-3. **Checkout → Checkout settings → Default payment link** ayarla (onaylı domain gerekli)
+3. **Checkout → Website approval** — domain onayı (production için)
 
 ---
 
-## 2. Hosted checkout oluştur (zorunlu)
+## 2. Default payment link (zorunlu)
 
-Ödeme Paddle tarafından host edilir (`sandbox-pay.paddle.io`).
+Hosted Checkout yerine kendi domain'inizde Paddle.js kullanılır.
 
-1. Paddle Dashboard → **Checkout → Hosted checkouts** → **New hosted checkout**
-2. **Redirect URL:** `http://localhost:8081/checkout/success?success=1` (veya ngrok/production URL)
-3. Kaydet → URL'yi kopyala (`https://sandbox-pay.paddle.io/checkout/hsc_...`)
-4. Backend config:
+1. Paddle Dashboard → **Checkout → Checkout settings → Default payment link**
+2. Değer: `https://api.etsyfetcher.shop/checkout/pay` (local: `http://localhost:8081/checkout/pay` veya ngrok URL)
+3. Backend config ile **aynı URL** olmalı:
 
 ```properties
-paddle.hosted-checkout-url=https://sandbox-pay.paddle.io/checkout/hsc_01...
-# veya sadece ID:
-paddle.hosted-checkout-id=hsc_01...
+paddle.checkout-url=https://api.etsyfetcher.shop/checkout/pay
+paddle.client-token=test_...   # sandbox client-side token
 ```
 
-Parametreler: [Hosted checkout URL](https://developer.paddle.com/paddle-js/about/hosted-checkout)
+`/checkout/pay` sayfası backend'de Paddle.js ile sunulur; `?_ptxn=` parametresi gelince checkout otomatik açılır.
+
+Parametreler: [Default payment link](https://developer.paddle.com/build/transactions/default-payment-link)
 
 ---
 
@@ -51,17 +52,18 @@ Parametreler: [Hosted checkout URL](https://developer.paddle.com/paddle-js/about
 
 ---
 
-## 4. API anahtarı
+## 4. API anahtarı ve client token
 
-**Developer tools → Authentication** → API key oluştur
+**Developer tools → Authentication**
 
 | Key | Nereye |
 |-----|--------|
 | API key | `PADDLE_API_KEY` |
+| Client-side token (sandbox: `test_…`, live: `live_…`) | `PADDLE_CLIENT_TOKEN` |
 | Environment | `PADDLE_ENVIRONMENT` (`sandbox` veya `production`) |
 | Price ID (monthly) | `PADDLE_PRICE_ID_MONTHLY` |
 | Price ID (yearly) | `PADDLE_PRICE_ID_YEARLY` |
-| Hosted checkout URL | `PADDLE_HOSTED_CHECKOUT_URL` veya `PADDLE_HOSTED_CHECKOUT_ID` |
+| Checkout page URL | `PADDLE_CHECKOUT_URL` (= Default payment link) |
 | Webhook secret | `PADDLE_WEBHOOK_SECRET` |
 
 ---
@@ -76,7 +78,8 @@ paddle.environment=sandbox
 paddle.webhook-secret=pdl_ntfset_01xxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxx
 paddle.price-id-monthly=pri_...
 paddle.price-id-yearly=pri_...
-paddle.hosted-checkout-id=hsc_01...
+paddle.checkout-url=http://localhost:8081/checkout/pay
+paddle.client-token=test_...
 paddle.success-url=http://localhost:8081/checkout/success?success=1
 paddle.cancel-url=http://localhost:8081/checkout/cancel
 ```
@@ -120,7 +123,8 @@ Debug: `GET /api/paddle/events` (JWT gerekli)
 | Endpoint | Açıklama |
 |----------|----------|
 | `GET /api/paddle/config` | Price ID'ler |
-| `POST /api/paddle/checkout` | Checkout URL oluştur |
+| `POST /api/paddle/checkout` | Checkout URL oluştur (`checkout.url`) |
+| `GET /checkout/pay` | Paddle.js checkout sayfası |
 | `POST /api/paddle/webhook` | Paddle eventleri |
 | `POST /api/subscription/cancel` | Dönem sonunda iptal |
 | `POST /api/subscription/reactivate` | İptali geri al |

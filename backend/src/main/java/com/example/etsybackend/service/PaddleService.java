@@ -66,8 +66,8 @@ public class PaddleService {
     @Value("${paddle.environment:sandbox}")
     private String environment;
 
-    @Value("${paddle.hosted-checkout-url:}")
-    private String hostedCheckoutUrl;
+    @Value("${paddle.checkout-url:}")
+    private String checkoutPageUrl;
 
     private final PaddleApiClient apiClient;
     private final ObjectMapper objectMapper;
@@ -96,10 +96,10 @@ public class PaddleService {
                     "Paddle config is incomplete. Checkout will fail until api-key and price IDs are set."
             );
         }
-        if (isBlankConfig(hostedCheckoutUrl)) {
+        if (isBlankConfig(checkoutPageUrl)) {
             log.warn(
-                    "Paddle hosted checkout is not configured. Set paddle.hosted-checkout-url "
-                            + "(Paddle Dashboard > Checkout > Hosted checkouts)."
+                    "Paddle checkout page is not configured. Set paddle.checkout-url "
+                            + "(must match Paddle Dashboard > Checkout > Default payment link)."
             );
         }
         if (!isBlankConfig(webhookSecret) && webhookSecret.startsWith("ntfset_")
@@ -114,7 +114,7 @@ public class PaddleService {
 
     public String createCheckoutUrl(Long userId, String email, String name, String priceId) {
         ensurePaddleConfigured();
-        ensureHostedCheckoutConfigured();
+        ensureCheckoutPageConfigured();
         ensureNoActiveSubscription(userId);
 
         String normalizedEmail = normalizeEmail(email);
@@ -128,17 +128,20 @@ public class PaddleService {
                 customerId,
                 priceId,
                 userId,
+                checkoutPageUrl,
                 successUrl,
                 cancelUrl
         );
 
-        String transactionId = transaction.path("id").asText(null);
-        if (transactionId == null || transactionId.isBlank()) {
-            throw new RuntimeException("Failed to create Paddle transaction");
+        String checkoutUrl = transaction.path("checkout").path("url").asText(null);
+        if (checkoutUrl == null || checkoutUrl.isBlank()) {
+            throw new RuntimeException(
+                    "Paddle did not return checkout.url. Set Default payment link in Paddle Dashboard "
+                            + "and paddle.checkout-url to the same page (e.g. /checkout/pay)."
+            );
         }
 
-        String checkoutUrl = buildHostedCheckoutUrl(transactionId, priceId, normalizedEmail, customerId);
-        log.info("Paddle hosted checkout URL: {}", checkoutUrl);
+        log.info("Paddle checkout URL: {}", checkoutUrl);
         return checkoutUrl;
     }
 
@@ -535,39 +538,12 @@ public class PaddleService {
         );
     }
 
-    private String buildHostedCheckoutUrl(
-            String transactionId,
-            String priceId,
-            String email,
-            String customerId
-    ) {
-        String base = resolveHostedCheckoutBase();
-        String separator = base.contains("?") ? "&" : "?";
-        StringBuilder url = new StringBuilder(base)
-                .append(separator)
-                .append("transaction_id=")
-                .append(java.net.URLEncoder.encode(transactionId, StandardCharsets.UTF_8))
-                .append("&price_id=")
-                .append(java.net.URLEncoder.encode(priceId, StandardCharsets.UTF_8))
-                .append("&user_email=")
-                .append(java.net.URLEncoder.encode(email, StandardCharsets.UTF_8));
-        if (customerId != null && !customerId.isBlank()) {
-            url.append("&paddle_customer_id=")
-                    .append(java.net.URLEncoder.encode(customerId, StandardCharsets.UTF_8));
-        }
-        return url.toString();
-    }
-
-    private String resolveHostedCheckoutBase() {
-        return hostedCheckoutUrl.trim();
-    }
-
-    private void ensureHostedCheckoutConfigured() {
-        if (isBlankConfig(hostedCheckoutUrl)) {
+    private void ensureCheckoutPageConfigured() {
+        if (isBlankConfig(checkoutPageUrl)) {
             throw new RuntimeException(
-                    "Paddle hosted checkout is not configured. "
-                            + "Create one in Paddle Dashboard > Checkout > Hosted checkouts, "
-                            + "then set paddle.hosted-checkout-url to the full URL."
+                    "Paddle checkout page is not configured. "
+                            + "Set paddle.checkout-url to your /checkout/pay page and match it in "
+                            + "Paddle Dashboard > Checkout > Default payment link."
             );
         }
     }

@@ -23,6 +23,7 @@ public final class PublicPaths {
             "/css/**",
             "/checkout/success",
             "/checkout/cancel",
+            "/checkout/pay",
             "/api/auth/**",
             "/api/admin/**",
             "/api/paddle/config",

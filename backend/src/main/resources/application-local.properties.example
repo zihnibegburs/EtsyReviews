@@ -26,8 +26,10 @@ paddle.price-id-monthly=pri_your_monthly_price_id
 paddle.price-id-yearly=pri_your_yearly_price_id
 paddle.success-url=http://localhost:8081/checkout/success?success=1
 paddle.cancel-url=http://localhost:8081/checkout/cancel
-# Full URL from Paddle Dashboard > Checkout > Hosted checkouts
-paddle.hosted-checkout-url=
+# Must match Paddle Dashboard > Checkout > Default payment link
+paddle.checkout-url=http://localhost:8081/checkout/pay
+# Paddle Dashboard > Developer tools > Authentication > Client-side tokens
+paddle.client-token=
 
 # CORS — SecurityConfig içinde chrome-extension://* tanımlı
 

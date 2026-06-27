@@ -69,6 +69,7 @@ public class PaddleApiClient {
             String customerId,
             String priceId,
             Long userId,
+            String checkoutPageUrl,
             String successUrl,
             String cancelUrl
     ) {
@@ -83,6 +84,9 @@ public class PaddleApiClient {
         customData.put("user_id", userId.toString());
 
         ObjectNode checkout = body.putObject("checkout");
+        if (checkoutPageUrl != null && !checkoutPageUrl.isBlank()) {
+            checkout.put("url", checkoutPageUrl);
+        }
         checkout.put("success_url", successUrl);
         checkout.put("cancel_url", cancelUrl);
 
