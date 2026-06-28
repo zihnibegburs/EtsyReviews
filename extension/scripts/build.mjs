@@ -121,6 +121,11 @@ function patchCheckoutHtml(html) {
 
 function patchManifest(manifest) {
     const next = structuredClone(manifest);
+    if (Array.isArray(next.host_permissions)) {
+        next.host_permissions = next.host_permissions.filter(
+            (permission) => !/^https?:\/\/localhost(:\d+)?\//.test(permission)
+        );
+    }
     next.web_accessible_resources = [
         {
             resources: [

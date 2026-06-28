@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build.mjs",
-    "build:dev": "node scripts/build.mjs --no-obfuscate"
+    "build:dev": "node scripts/build.mjs --no-obfuscate",
+    "package": "node scripts/build.mjs && node scripts/package.mjs",
+    "package:dev": "node scripts/build.mjs --no-obfuscate && node scripts/package.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.12",

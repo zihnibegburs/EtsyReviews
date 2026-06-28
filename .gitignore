@@ -28,6 +28,7 @@ node_modules/
 .next/
 out/
 dist/
+extension/*.zip
 *.tsbuildinfo
 
 # IDE
