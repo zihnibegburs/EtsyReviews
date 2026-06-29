@@ -1015,9 +1015,42 @@ async function fetchAllReviews(data, options = {}) {
     });
 }
 
+async function fetchReviewScopeCounts(data, { scopes = ['listingReviews', 'shopReviews'] } = {}) {
+    const counts = { listingReviews: null, shopReviews: null };
+
+    if (!data?.listingId || !data?.shopId) {
+        return counts;
+    }
+
+    await refreshCsrfToken(data);
+    if (!data.csrfToken) {
+        return counts;
+    }
+
+    const results = await Promise.all(
+        scopes.map(async (scope) => {
+            try {
+                const result = await fetchDeepDiveReviewsViaApi(data, 1, { scope, sortOption: 'Relevancy' });
+                return { scope, total: result.jsDataSummary?.totalReviews ?? null };
+            } catch {
+                return { scope, total: null };
+            }
+        })
+    );
+
+    for (const { scope, total } of results) {
+        if (typeof total === 'number') {
+            counts[scope] = total;
+        }
+    }
+
+    return counts;
+}
+
 if (typeof globalThis !== 'undefined') {
     globalThis.ReviewFetcher = {
         fetchAllReviews,
+        fetchReviewScopeCounts,
         refreshCsrfToken
     };
 }

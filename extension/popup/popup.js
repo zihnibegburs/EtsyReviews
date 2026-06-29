@@ -11,6 +11,8 @@ const etsyDataCard = document.getElementById('etsyDataCard');
 const displayListingId = document.getElementById('displayListingId');
 const displayShopId = document.getElementById('displayShopId');
 const displayStatus = document.getElementById('displayStatus');
+const scopeLabelItem = document.getElementById('scopeLabelItem');
+const scopeLabelShop = document.getElementById('scopeLabelShop');
 const fetchReviews = document.getElementById('fetchReviews');
 const refreshBtn = document.getElementById('refreshBtn');
 const statusBadge = document.getElementById('statusBadge');
@@ -352,12 +354,58 @@ async function collectEtsyDataFromTab(tabId, maxRetries = 12, intervalMs = 400) 
     });
 }
 
+function formatScopeLabel(base, count) {
+    if (typeof count !== 'number' || count < 0) {
+        return base;
+    }
+    return `${base} (${count.toLocaleString()})`;
+}
+
+function updateScopeLabels(counts) {
+    if (scopeLabelItem) {
+        scopeLabelItem.textContent = formatScopeLabel('Item', counts?.listingReviews);
+    }
+    if (scopeLabelShop) {
+        scopeLabelShop.textContent = formatScopeLabel('Shop', counts?.shopReviews);
+    }
+}
+
+function resetScopeLabels() {
+    updateScopeLabels(null);
+}
+
+async function loadReviewScopeCounts(data) {
+    if (!data?.listingId || !data?.shopId) {
+        resetScopeLabels();
+        return;
+    }
+
+    updateScopeLabels(data.reviewCounts || null);
+
+    const hasAllCounts = typeof data.reviewCounts?.listingReviews === 'number' &&
+        typeof data.reviewCounts?.shopReviews === 'number';
+    if (hasAllCounts) {
+        return;
+    }
+
+    try {
+        const counts = await chrome.runtime.sendMessage({ type: 'getReviewScopeCounts', data });
+        if (chrome.runtime.lastError || counts?.error) {
+            return;
+        }
+        updateScopeLabels(counts);
+    } catch (error) {
+        console.warn('Could not load review scope counts:', error);
+    }
+}
+
 function applyEtsyData(data) {
     if (!data?.listingId || !data?.shopId) {
         console.warn('⚠️ Incomplete Etsy data');
         etsyData = null;
         etsyDataCard.classList.add('hidden');
         fetchReviews.disabled = true;
+        resetScopeLabels();
         setStatusText('Missing listing or shop ID — try refreshing the page', 'warning');
         return;
     }
@@ -367,6 +415,7 @@ function applyEtsyData(data) {
     updateEtsyDataDisplay(data);
     fetchReviews.disabled = false;
     setStatusText('Listing detected — ready to fetch', 'success');
+    loadReviewScopeCounts(data);
 }
 
 async function requestEtsyData() {
@@ -385,6 +434,7 @@ async function requestEtsyData() {
             etsyData = null;
             etsyDataCard.classList.add('hidden');
             fetchReviews.disabled = true;
+            resetScopeLabels();
             setStatusText('Navigate to an Etsy listing page first', 'navigate');
             return;
         }
@@ -402,6 +452,7 @@ async function requestEtsyData() {
             etsyData = null;
             etsyDataCard.classList.add('hidden');
             fetchReviews.disabled = true;
+            resetScopeLabels();
             setStatusText('Could not read listing data — try refreshing the page', 'warning');
             return;
         }
@@ -412,6 +463,7 @@ async function requestEtsyData() {
         etsyData = null;
         etsyDataCard.classList.add('hidden');
         fetchReviews.disabled = true;
+        resetScopeLabels();
         setStatusText('Failed to detect listing — try again', 'warning');
     }
 }
