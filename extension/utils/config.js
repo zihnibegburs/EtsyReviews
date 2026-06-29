@@ -17,5 +17,5 @@ if (typeof globalThis !== 'undefined') {
 }
 
 if (typeof console !== 'undefined') {
-    console.log('[Etsy Extension] API:', API_CONFIG.BASE_URL);
+    console.log('[Etsy Review Exporter & Analytics] API:', API_CONFIG.BASE_URL);
 }

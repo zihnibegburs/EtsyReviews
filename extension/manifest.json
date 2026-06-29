@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Etsy Extension",
+  "name": "Etsy Review Exporter & Analytics",
   "version": "1.0.0",
-  "description": "Chrome extension for Etsy with subscription management",
+  "description": "Export Etsy listing reviews to CSV and view review analytics",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs7u23siOhG+M62gb55iN6Axk9U7bAb6jIoL1RAJN6B9bcUNadc6VgC9U1BhtgGSGyKMS6Vte5BA5YUcwfIEZR60liCCtEcXHuDqqFG+RE5t21PXPS+l1WEJvsQXmKczFuJW5ndqnHfuBi4j4mv5d7Hm6p63fVw/yeThZM+ZzEHH65CHgiPqvt8+xWsNJQOOL6bMpiT3WG9maTQ6+2wN9Gl4qFbLQi1MuVXhxxDIuHZKQH8MicUXPe1/4+Ye6zdil6hhrUZbOpOBitFD5V6u1K4aeogUAPg6G4t0fDmHk2wos7tXGKX/w8VbBJ6tqLU7o9jrS4q5OFzzkASFpH/TLzQIDAQAB",
   "icons": {
     "16": "icons/icon16.png",

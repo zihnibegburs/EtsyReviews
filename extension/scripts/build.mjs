@@ -121,6 +121,8 @@ function patchCheckoutHtml(html) {
 
 function patchManifest(manifest) {
     const next = structuredClone(manifest);
+    // Chrome Web Store rejects uploads that include `key` (dev-only, fixes unpacked extension ID).
+    delete next.key;
     if (Array.isArray(next.host_permissions)) {
         next.host_permissions = next.host_permissions.filter(
             (permission) => !/^https?:\/\/localhost(:\d+)?\//.test(permission)

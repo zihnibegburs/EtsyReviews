@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Etsy Review Scraper</title>
+    <title>Etsy Review Exporter & Analytics</title>
     <link rel="stylesheet" href="../styles/common.css">
     <link rel="stylesheet" href="popup.css">
 </head>
@@ -13,9 +13,9 @@
         <div id="loginScreen" class="screen">
             <div class="login-container">
                 <div class="logo">
-                    <img src="../icons/icon48.png" alt="Etsy Review Scraper" width="52" height="52">
+                    <img src="../icons/icon48.png" alt="Etsy Review Exporter & Analytics" width="52" height="52">
                 </div>
-                <h1>Etsy Review Scraper</h1>
+                <h1>Etsy Review Exporter & Analytics</h1>
                 <p class="subtitle">Sign in to scrape and export reviews</p>
 
                 <button id="loginBtn" class="btn btn-primary">
@@ -133,11 +133,11 @@
                                     <div class="scope-options">
                                         <label class="scope-option">
                                             <input type="radio" name="reviewScope" value="listingReviews">
-                                            <span>Item</span>
+                                            <span id="scopeLabelItem">Item</span>
                                         </label>
                                         <label class="scope-option">
                                             <input type="radio" name="reviewScope" value="shopReviews" checked>
-                                            <span>Shop</span>
+                                            <span id="scopeLabelShop">Shop</span>
                                         </label>
                                     </div>
                                 </div>

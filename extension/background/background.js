@@ -71,6 +71,7 @@ async function getEtsyDataFromTab(tabId) {
                 shopId: response.shopId,
                 listingUrl: response.listingUrl || null,
                 isExternalReferrer: !!response.isExternalReferrer,
+                reviewCounts: response.reviewCounts || null,
                 categoryPath: []
             };
             return etsyData;
@@ -262,6 +263,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             shopId: msg.shopId,
             listingUrl: msg.listingUrl || null,
             isExternalReferrer: !!msg.isExternalReferrer,
+            reviewCounts: msg.reviewCounts || null,
             categoryPath: msg.categoryPath || []
         };
         console.log('💾 Stored Etsy data:', {
@@ -282,6 +284,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         } : 'null');
         sendResponse(etsyData);
         return false;
+    }
+
+    if (msg.type === 'getReviewScopeCounts') {
+        (async () => {
+            try {
+                const data = msg.data || etsyData;
+                const existing = data?.reviewCounts || {};
+                const missingScopes = ['listingReviews', 'shopReviews'].filter(
+                    (scope) => typeof existing[scope] !== 'number'
+                );
+
+                if (missingScopes.length === 0) {
+                    sendResponse(existing);
+                    return;
+                }
+
+                const fetched = await fetchReviewScopeCounts(data, { scopes: missingScopes });
+                sendResponse({
+                    listingReviews: existing.listingReviews ?? fetched.listingReviews ?? null,
+                    shopReviews: existing.shopReviews ?? fetched.shopReviews ?? null
+                });
+            } catch (error) {
+                sendResponse({
+                    listingReviews: null,
+                    shopReviews: null,
+                    error: error.message
+                });
+            }
+        })();
+        return true;
     }
 
     if (msg.type === 'stopReviewFetch') {

@@ -121,6 +121,77 @@ function extractShopId() {
     return null;
 }
 
+function findReviewCountsInObject(obj, depth = 0, found = {}) {
+    if (!obj || depth > 14 || typeof obj !== 'object') {
+        return found;
+    }
+
+    const listingKeys = ['listing_reviews_count', 'listingReviews', 'listing_review_count'];
+    const shopKeys = ['shop_total_rating_count', 'shopTotalReviews', 'shop_reviews_count', 'shopReviews'];
+
+    for (const key of listingKeys) {
+        const value = obj[key];
+        if (found.listingReviews == null && typeof value === 'number' && value >= 0) {
+            found.listingReviews = value;
+        } else if (found.listingReviews == null && typeof value === 'string' && /^\d+$/.test(value)) {
+            found.listingReviews = parseInt(value, 10);
+        }
+    }
+
+    for (const key of shopKeys) {
+        const value = obj[key];
+        if (found.shopReviews == null && typeof value === 'number' && value >= 0) {
+            found.shopReviews = value;
+        } else if (found.shopReviews == null && typeof value === 'string' && /^\d+$/.test(value)) {
+            found.shopReviews = parseInt(value, 10);
+        }
+    }
+
+    if (obj.scope === 'listing_reviews' && typeof obj.totalReviews === 'number') {
+        found.listingReviews = obj.totalReviews;
+    }
+    if (obj.scope === 'shop_reviews' && typeof obj.totalReviews === 'number') {
+        found.shopReviews = obj.totalReviews;
+    }
+
+    if (obj.active_tab === 'listing_reviews' && typeof obj.totalReviews === 'number') {
+        found.listingReviews = obj.totalReviews;
+    }
+    if (obj.active_tab === 'shop_reviews' && typeof obj.totalReviews === 'number') {
+        found.shopReviews = obj.totalReviews;
+    }
+
+    for (const value of Object.values(obj)) {
+        if (value && typeof value === 'object') {
+            findReviewCountsInObject(value, depth + 1, found);
+        }
+    }
+
+    return found;
+}
+
+function extractReviewScopeCounts() {
+    const counts = { listingReviews: null, shopReviews: null };
+    const sources = [window.__etsy_server_data__];
+
+    for (const script of document.querySelectorAll('script[type="application/json"]')) {
+        try {
+            sources.push(JSON.parse(script.textContent));
+        } catch {
+            // ignore invalid JSON blocks
+        }
+    }
+
+    for (const source of sources) {
+        if (!source) continue;
+        const found = findReviewCountsInObject(source);
+        if (found.listingReviews != null) counts.listingReviews = found.listingReviews;
+        if (found.shopReviews != null) counts.shopReviews = found.shopReviews;
+    }
+
+    return counts;
+}
+
 function collectEtsyData() {
     const listingId = extractListingId();
     const shopId = extractShopId();
@@ -128,8 +199,9 @@ function collectEtsyData() {
     const listingUrl = window.location.href;
     const isExternalReferrer = new URLSearchParams(window.location.search).get('external') === '1' ||
         (document.referrer && !document.referrer.includes('etsy.com'));
+    const reviewCounts = extractReviewScopeCounts();
 
-    return { listingId, shopId, csrfToken, listingUrl, isExternalReferrer };
+    return { listingId, shopId, csrfToken, listingUrl, isExternalReferrer, reviewCounts };
 }
 
 function publishEtsyData() {
@@ -146,6 +218,7 @@ function publishEtsyData() {
         shopId: data.shopId,
         listingUrl: data.listingUrl,
         isExternalReferrer: data.isExternalReferrer,
+        reviewCounts: data.reviewCounts || null,
         categoryPath: []
     }, () => {
         if (chrome.runtime.lastError) {

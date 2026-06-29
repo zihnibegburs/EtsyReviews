@@ -12,6 +12,34 @@ const StorageManager = {
 };
 
 let billingConfig = null;
+let checkoutInFlight = false;
+
+function createCheckoutError(message, { expected = false } = {}) {
+    const error = new Error(message);
+    error.expected = expected;
+    return error;
+}
+
+function resolveCheckoutUrl(checkoutUrl) {
+    if (!checkoutUrl || /^https?:\/\//i.test(checkoutUrl)) {
+        return checkoutUrl;
+    }
+    const siteUrl = getSiteUrl();
+    return `${siteUrl}${checkoutUrl.startsWith('/') ? '' : '/'}${checkoutUrl}`;
+}
+
+function openTab(url) {
+    const resolvedUrl = resolveCheckoutUrl(url);
+    return new Promise((resolve, reject) => {
+        chrome.tabs.create({ url: resolvedUrl }, (tab) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve(tab);
+        });
+    });
+}
 
 function getSiteUrl() {
     return (API_CONFIG.SITE_URL || 'https://api.etsyfetcher.shop').replace(/\/$/, '');
@@ -267,7 +295,10 @@ async function openCheckout(priceId) {
             throw new Error('Session expired. Log out and sign in again from the extension popup.');
         }
         if (response.status === 409) {
-            throw new Error(data.error || 'You already have an active subscription.');
+            throw createCheckoutError(
+                data.error || 'You already have an active subscription.',
+                { expected: true }
+            );
         }
         if (!response.ok) {
             throw new Error(data.error || `Checkout failed (HTTP ${response.status})`);
@@ -276,7 +307,7 @@ async function openCheckout(priceId) {
             throw new Error('Checkout URL missing from server response');
         }
 
-        chrome.tabs.create({ url: data.checkoutUrl });
+        await openTab(data.checkoutUrl);
     } finally {
         loadingDiv.classList.add('hidden');
     }
@@ -310,7 +341,7 @@ async function startCheckout(plan) {
     const yearlyBtn = document.getElementById('yearlyBtn');
     const activeBtn = plan === 'yearly' ? yearlyBtn : monthlyBtn;
 
-    if (activeBtn.disabled) {
+    if (activeBtn.disabled || checkoutInFlight) {
         return;
     }
 
@@ -322,6 +353,7 @@ async function startCheckout(plan) {
 
     const originalLabel = activeBtn.textContent;
     clearCheckoutError();
+    checkoutInFlight = true;
     monthlyBtn.disabled = true;
     yearlyBtn.disabled = true;
     activeBtn.textContent = plan === 'yearly' && activeBtn.dataset.action === 'upgrade'
@@ -347,13 +379,22 @@ async function startCheckout(plan) {
 
         await openCheckout(priceId);
     } catch (error) {
-        console.error('Checkout error:', error);
-        showCheckoutError(error.message || 'Failed to open checkout');
+        if (error.expected) {
+            clearCheckoutError();
+        } else {
+            console.error('Checkout error:', error);
+            showCheckoutError(error.message || 'Failed to open checkout');
+        }
     } finally {
+        checkoutInFlight = false;
         if (activeBtn.textContent === 'Opening checkout...' || activeBtn.textContent === 'Upgrading...') {
             activeBtn.textContent = originalLabel;
         }
-        await loadStatus();
+        try {
+            await loadStatus();
+        } catch (error) {
+            console.warn('Could not refresh subscription status:', error);
+        }
     }
 }
 
