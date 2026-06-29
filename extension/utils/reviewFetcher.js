@@ -661,7 +661,7 @@ async function fetchViaDeepDiveApi(data, { reviewScope = 'listingReviews', sortO
     let jsDataSummary = initialJsDataSummary;
     let lastCompletedPage = Math.max(startPage - 1, 0);
 
-    while (page <= 500) {
+    while (true) {
         const abortBeforeFetch = abortedResult(shouldAbort, allReviews, jsDataSummary);
         if (abortBeforeFetch) {
             return { ...abortBeforeFetch, fetchMethod: 'deepDive', lastPage: lastCompletedPage };
@@ -808,7 +808,7 @@ async function fetchViaListingHtml(data, { isProUser, freeLimit, delayMin, delay
     let hasMore = true;
     let lastCompletedPage = Math.max(startPage - 1, 0);
 
-    while (hasMore && page <= 500) {
+    while (hasMore) {
         const abortBeforeFetch = abortedResult(shouldAbort, allReviews);
         if (abortBeforeFetch) {
             return { ...abortBeforeFetch, fetchMethod: 'listingHtml', lastPage: lastCompletedPage };
