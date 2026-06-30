@@ -13,14 +13,12 @@
     "storage",
     "identity",
     "tabs",
-    "alarms",
     "scripting"
   ],
   "host_permissions": [
     "http://localhost:8081/*",
     "https://api.etsyfetcher.shop/*",
     "https://www.googleapis.com/*",
-    "https://*.paddle.com/*",
     "*://www.etsy.com/*"
   ],
   "action": {
@@ -40,12 +38,6 @@
       "js": ["content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["output.html", "output.js", "checkout.html", "checkout.js"],
-      "matches": ["<all_urls>"]
     }
   ],
   "oauth2": {

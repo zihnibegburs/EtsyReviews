@@ -128,17 +128,6 @@ function patchManifest(manifest) {
             (permission) => !/^https?:\/\/localhost(:\d+)?\//.test(permission)
         );
     }
-    next.web_accessible_resources = [
-        {
-            resources: [
-                'output.html',
-                'output.bundle.js',
-                'checkout.html',
-                'checkout.bundle.js',
-            ],
-            matches: ['<all_urls>'],
-        },
-    ];
     return next;
 }
 
